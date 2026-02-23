@@ -1,7 +1,8 @@
-function [v_c] = vortex(x, y, x_center, y_center, intensity)
+function [v_c] = vortex(~, x, y, x_center, y_center, intensity)
 % Compute vortex current centered at a point.
 %
 % Inputs:
+%   t         - time [s] (unused, time-invariant)
 %   x         - x positions [m]
 %   y         - y positions [m]
 %   x_center  - vortex center x coordinate [m]

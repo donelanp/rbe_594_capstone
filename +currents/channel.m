@@ -1,7 +1,8 @@
-function [v_c] = channel(x, y, y_center, channel_width, intensity)
+function [v_c] = channel(~, x, y, y_center, channel_width, intensity)
 % Compute channel current in the x-direction.
 %
 % Inputs:
+%   t             - time [s] (unused, time-invariant)
 %   x             - x positions [m]
 %   y             - y positions [m]
 %   y_center      - center of the channel [m]
