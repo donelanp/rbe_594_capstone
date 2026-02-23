@@ -49,7 +49,7 @@
 % 
 
 %% Open the Model
-open_system("asbAUV");
+open_system("ON");
 %%
 % The top level diagram closely resembles the high-level workflow presented 
 % in the introduction. 
@@ -69,27 +69,27 @@ open_system("asbAUV");
 % parameters. The model passes these parameters and the sensor measurements
 % of the vehicle's actual position and velocity to the translational
 % controller.
-open_system("asbAUV/Translation Controller")
+open_system("ON/Translation Controller")
 %%
 % Depending on the selection in the top-level diagram, either the 
 % position controller or the velocity controller is activated. The 
 % "Position Controller" subsystem uses one PID controller block to 
 % determine the required thrust command in each direction, requiring three 
 % controller blocks in total.
-open_system("asbAUV/Translation Controller/Position Controller")
+open_system("ON/Translation Controller/Position Controller")
 %%
 % The resulting thrust commands are then passed through dead zone blocks to 
 % discard values of thrust control that are less than 0.05.
 % 
 % The "Velocity Controller" subsystem also uses three PID controller blocks
 % to determine the required thrust commands.
-open_system("asbAUV/Translation Controller/Velocity Controller")
+open_system("ON/Translation Controller/Velocity Controller")
 %%
 
 %% Vehicle and Environment Modeling
 % The computed thrust commands are then passed to the "Plant and 
 % Environment Model" subsystem.
-open_system("asbAUV/Plant and Environment Model")
+open_system("ON/Plant and Environment Model")
 %%
 % In the "Plant and Environment Model" subsystem, the computed thrust 
 % commands are first passed to the "Propulsion Forces and Moments" 
@@ -106,12 +106,12 @@ open_system("asbAUV/Plant and Environment Model")
 % accepts the vehicle angle of attack, sideslip angle, velocity in the body
 % frame, and the Euler orientation angles relative to the inertial frame as
 % inputs.
-open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments")
+open_system("ON/Plant and Environment Model/Environmental Forces & Moments")
 %%
 % The "Hydrodynamic Forces" subsystem contains two conditionally operated 
 % subsystems, "Hydrodynamic Forces - Accurate" and "Hydrodynamic
 % Forces - Basic".
-open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/Hydrodynamic Forces")
+open_system("ON/Plant and Environment Model/Environmental Forces & Moments/Hydrodynamic Forces")
 %%
 % The selected level of simulation fidelity determines the subsystem that 
 % gets activated. 
@@ -131,7 +131,7 @@ open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/H
 % In the "Hydrodynamic Forces - Basic" subsystem, the computation of drag
 % assumes a drag coefficient, CD, of 0.75. Note that the signals for angle 
 % of attack and sideslip angles are ignored.
-open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/Hydrodynamic Forces/Hydrodynamic Forces - Basic/Marine Drag - Body Axes")
+open_system("ON/Plant and Environment Model/Environmental Forces & Moments/Hydrodynamic Forces/Hydrodynamic Forces - Basic/Marine Drag - Body Axes")
 %%
 % The net result is given by:
 %%
@@ -154,13 +154,13 @@ open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/H
 % Forces - Accurate" subsystem becomes activated. This selection also 
 % componentizes the computation of lift and drag into their own subsystems.
 
-open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/" + ...
+open_system("ON/Plant and Environment Model/Environmental Forces & Moments/" + ...
     "Hydrodynamic Forces/Hydrodynamic Forces - Accurate")
 %%
 % Note that in the "Force Exerted due to Drag (Body axis)" subsystem, the 
 % angle of attack and sideslip angles are now used.
 
-open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments" + ...
+open_system("ON/Plant and Environment Model/Environmental Forces & Moments" + ...
     "/Hydrodynamic Forces/Hydrodynamic Forces - Accurate/Marine Drag - Body axes")
 %%
 % Letting alpha represent the angle of attack, beta represent the side-slip angle, 
@@ -182,7 +182,7 @@ open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments" 
 % generated due to forward motion. This computation occurs in the "Force
 % Exerted due to lift (Body axis)" subsystem.
 
-open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/Hydrodynamic Forces/Hydrodynamic Forces - Accurate/Marine Lift - Body axes");
+open_system("ON/Plant and Environment Model/Environmental Forces & Moments/Hydrodynamic Forces/Hydrodynamic Forces - Accurate/Marine Lift - Body axes");
 %%
 % The net result is given by:
 %%
@@ -195,7 +195,7 @@ open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/H
 % Simultaneously, the hydrostatic force and moment (due to the vehicle's
 % weight on buoyancy) are computed inside the "Hydrostatic Forces" subsystem.
 
-open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/Hydrostatic Forces")
+open_system("ON/Plant and Environment Model/Environmental Forces & Moments/Hydrostatic Forces")
 %%
 % The computed hydrodynamic, hydrostatic, and previously computed
 % propulsion forces and moments are passed to the "Combine Forces and
@@ -206,7 +206,7 @@ open_system("asbAUV/Plant and Environment Model/Environmental Forces & Moments/H
 % side-slip angle, orientation angles, angular rates, and accelerations
 % after applying the previously computed thrust input.
 
-open_system("asbAUV/Plant and Environment Model/Dynamics solver")
+open_system("ON/Plant and Environment Model/Dynamics solver")
 %%
 % For organizational purposes, the velocity, position, angle of attack, 
 % side-slip angle, orientation angles, and their rates are grouped 
@@ -226,7 +226,7 @@ open_system("asbAUV/Plant and Environment Model/Dynamics solver")
 % a sensor measurement and demonstrate the use of filters to remove noise
 % by introducing noise into the vehicle's current motion parameters.
 
-open_system("asbAUV/Sensor data and State Estimation")
+open_system("ON/Sensor data and State Estimation")
 %%
 % Your decision on the inclusion of noise is reflected in the subsystem 
 % that is activated. If you want to simulate without noise, the AUV 
@@ -234,7 +234,7 @@ open_system("asbAUV/Sensor data and State Estimation")
 % Conversely, if you decide to simulate with the presence of noise, the 
 % "System With Noise" subsystem is activated.
 
-open_system("asbAUV/Sensor data and State Estimation/System With Noise");
+open_system("ON/Sensor data and State Estimation/System With Noise");
 %%
 % The AUV data (comprising the vehicle's accelerations, angular rates,
 % angular accelerations, and center of gravity location) and the 
@@ -244,7 +244,7 @@ open_system("asbAUV/Sensor data and State Estimation/System With Noise");
 % single signal called "IMU Measurements", which is passed to the "Internal
 % Filter" subsystem.
 
-open_system("asbAUV/Sensor data and State Estimation/System With Noise/Internal filter")
+open_system("ON/Sensor data and State Estimation/System With Noise/Internal filter")
 %%
 % The IMU Measurements signal is separated back into measured acceleration 
 % and measured angular rates. Each quantity has three components 

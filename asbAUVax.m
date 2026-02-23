@@ -7,7 +7,6 @@ function asbAUVax(block)
 end
 
 function setup(block)
-
     mdlInitializeSizes(block);
     block.RegBlockMethod('Outputs', @mdlGetTimeOfNextVarHit);
     block.RegBlockMethod('Update', @mdlUpdate);
@@ -30,7 +29,7 @@ function mdlInitializeSizes(block)
     block.InputPort(1).DatatypeID = 0;
     block.InputPort(1).Dimensions = 6;
     block.InputPort(1).DirectFeedthrough = false;
-
+    
     %
     % initialize the array of sample times
     %
@@ -138,7 +137,7 @@ end
 function mdlUpdate(block)
     u = block.InputPort(1).Data;
     Config = block.DialogPrm(1).Data;
-
+    
     if ~Config.Animenable
         return;
     end
