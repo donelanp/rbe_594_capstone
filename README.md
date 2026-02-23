@@ -1,0 +1,6 @@
+- docker
+- docker-compose
+- startup x11 server (I used cygwin: startxwin)
+- docker run -it --rm --name moveit2_container -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix moveit/moveit2:main-humble-tutorial-source /bin/bash
+    -> in container: source /opt/ros/$ROS_DISTRO/setup.bash # or your workspace setup.bash if you built from source
+    -> in container: ros2 launch moveit2_tutorials demo.launch.py
