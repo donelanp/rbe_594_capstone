@@ -1,4 +1,7 @@
 *.asv
 *.fig
 *.jpg
+*.mat
+*.mp4
 *.png
+*.DS_Store
