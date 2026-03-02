@@ -103,8 +103,7 @@ function mdlInitializeSizes(block)
     handle.craft = patch(xm,ym,zm,[1 1 1],"facealpha",0);
     vert = get(handle.craft,'vertices');
     set(handle.axes(1),'userData',vert)
-    set(handle.craft,'edgeColor',[0 0 1],'clipping','off');
-
+    set(handle.craft,'edgeColor',[1 0 0],'clipping','off');
     %
     % Set Handles of graphics in Figure UserData
     %
