@@ -8,7 +8,7 @@ x0 = [-500000; -200000; 0];
 xf = [50000; 30000];
 
 % current model selection
-current_model = 'channel';
+current_model = 'hycom';
 switch current_model
     case 'channel'
         y_center      = -85000;
@@ -27,6 +27,10 @@ switch current_model
         intensity     = 1.0;
         frequency     = 1.5e-5;
         current_field = @(t, x, y) currents.oscillating_uniform(t, x, y, intensity, frequency);
+    case 'hycom'
+        origin        = [-37.5, 22.5];
+        region        = [-660000, 660000, -500000, 500000];
+        current_field = @(t, x, y) currents.hycom(t, x, y, origin, region);
     otherwise
         error('Unknown current model: %s', current_model);
 end
@@ -73,12 +77,12 @@ zopt = fmincon(cost, z0, [], [], [], [], lb, ub, constraints);
 x                  = x_nd .* [L; L; 1];
 tauf               = tauf_nd * T;
 
+dynfun_dim = @(tau, x, u) system_dynamics(tau, x, u, current_field, wheelbase, max_speed, max_steer);
 [t_s, x_s] = lpm.simulate(x0, u, tauf, dynfun_dim);
 t_i        = linspace(0, tauf, 100);
 x_i        = lpm.interpolate(x, t_i, tauf);
 
 % plot state and control input vs time
-dynfun_dim = @(tau, x, u) system_dynamics(tau, x, u, current_field, wheelbase, max_speed, max_steer);
 lpm.plot_results(x, u, tauf, x0, [xf; nan], dynfun_dim);
 
 % sample spatial region to plot current magnitude and direction
