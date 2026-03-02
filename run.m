@@ -103,7 +103,7 @@ for k = 1:numel(t_i)
 end
 
 % plot vehicle trajectory over time
-fig           = figure('Theme', 'light', 'Color', 'w', 'Position', [100 100 900 700]);
+fig           = figure('Theme', 'light', 'Color', 'w', 'Position', [100 100 1024 512]);
 vid           = VideoWriter(['trajectory_' current_model '.mp4'], 'MPEG-4');
 vid.FrameRate = 30;
 open(vid);
