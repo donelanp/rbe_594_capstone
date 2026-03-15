@@ -83,7 +83,11 @@ function mdlInitializeSizes(block)
        'xGrid','on','yGrid','on','zGrid','on',...
        'units','normal', ...
        'clipping','off');
-    view(handle.axes(1),[-38 35]);
+    if Config.dimension==1
+        view(handle.axes(1),[-38 35]);
+    else
+        view(handle.axes(1),2);
+    end
     xlabel(handle.axes(1),'X (m)');
     ylabel(handle.axes(1),'Y (m)');
     zlabel(handle.axes(1),'Z (m)');
