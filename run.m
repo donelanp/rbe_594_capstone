@@ -100,7 +100,7 @@ diag_ind = [1, 9, 16, 22, 27, 31, 34, 36];
 lb_state = [-Inf; -Inf; -pi; -Inf(36, 1)];
 ub_state = [ Inf;  Inf;  pi;  Inf(36, 1)];
 for idx = diag_ind
-    lb_state(3 + idx) = eps_L;
+    lb_state(3 + idx) = eps();
 end
 lb = [repmat(lb_state, N+1, 1); repmat([-1; -1], N+1, 1); 0  ];
 ub = [repmat(ub_state, N+1, 1); repmat([ 1;  1], N+1, 1); Inf];
@@ -117,7 +117,7 @@ x_cov              = x_nd(4:end,:);
 dynfun_uuv_dim = @(tau, x, u) uuv_dynamics(tau, x, u, current_field, wheelbase, max_speed, max_steer);
 [t_s, x_s]     = lpm.simulate(x0, u, tauf, dynfun_uuv_dim);
 t_i            = linspace(0, tauf, 100);
-x_i            = lpm.interpolate(x, t_i, tauf);
+x_i            = lpm.interpolate(x_uuv, t_i, tauf);
 
 % plot state and control input vs time
 lpm.plot_results(x_uuv, u, tauf, x0, [xf; nan], dynfun_uuv_dim);
