@@ -64,63 +64,48 @@ P0        = diag([sigma_p, sigma_p, sigma_v, sigma_v, sigma_psi, sigma_ba, sigma
 L0        = chol(P0, 'lower');
 L0_vec    = L_to_lvec(L0);
 
-% non-dimensionalization of vehicle states
+% parameters used for non-dimensionalization
 L_char = norm(xf - x0(1:2)); % characteristic length [m]
 T_char = L_char / max_speed; % characteristic time [s]
-
-x0_nd            = [x0(1)/L_char; x0(2)/L_char; x0(3)];
-xf_nd            = [xf(1)/L_char; xf(2)/L_char];
-current_field_nd = @(t_nd, x_nd, y_nd) current_field(T_char * t_nd, L_char * x_nd, L_char * y_nd) / max_speed;
-wheelbase_nd     = wheelbase / L_char;
-max_speed_nd     = 1;
-max_steer_nd     = max_steer;
-max_accel_nd     = max_accel * T_char / max_speed;
-max_srate_nd     = max_srate * T_char;
-
-% non-dimensionalization of covariance
-D_s_vec   = [L_char, L_char, max_speed, max_speed, 1, max_accel, max_accel, max_srate];
-D_s_inv   = diag(1 ./ D_s_vec);
-L0_nd     = D_s_inv * L0;
-L0_vec_nd = L_to_lvec(L0_nd);
-Q_nd      = T_char * D_s_inv * Q * D_s_inv;
 
 % cost function
 cost = @(z) compute_cost(z, N);
 
 % constraint function (dynamics and boundary conditions)
-% full state: x = [pE_nd; pN_nd; theta; L_nd_vec (36 elements)] = 39 states
-% z = [x (39*(N+1)); u (2*(N+1)); tauf (1)]
-constraints = @(z) nonlcon(z, x0_nd, xf_nd, L0_vec_nd, current_field_nd, wheelbase_nd, max_speed_nd, max_steer_nd, max_accel_nd, max_srate_nd, Q_nd, N);
+% x_nd = [pE_nd (1); pN_nd (1); theta_nd (1); L_vec_nd (36)]
+% u_nd = [v_nd (1); δ_nd (1)]
+% z    = [x_nd (39*(N+1)); u_nd (2*(N+1)); tauf_nd (1)]
+constraints = @(z) nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, L_char, T_char, Q, N);
 
-% initial guess (straight line, constant controls, constant covariance)
-z0 = initialize_guess(N, x0_nd, xf_nd, L0_vec_nd);
+% initial guess
+z0 = initialize_guess(N, x0, xf, L0_vec, L_char, T_char, max_accel, max_srate, Q);
 
 % decision variable bounds
 diag_ind = [1, 9, 16, 22, 27, 31, 34, 36];
-lb_state = [-Inf; -Inf; -pi; -Inf(36, 1)];
-ub_state = [ Inf;  Inf;  pi;  Inf(36, 1)];
+lb_state = [-Inf; -Inf; -1; -Inf(36, 1)];
+ub_state = [ Inf;  Inf;  1;  Inf(36, 1)];
 for idx = diag_ind
     lb_state(3 + idx) = eps();
 end
-lb = [repmat(lb_state, N+1, 1); repmat([-1; -1], N+1, 1); 0  ];
+lb = [repmat(lb_state, N+1, 1); repmat([0; -1], N+1, 1); 0  ];
 ub = [repmat(ub_state, N+1, 1); repmat([ 1;  1], N+1, 1); Inf];
 
 % optimize
 zopt = fmincon(cost, z0, [], [], [], [], lb, ub, constraints);
 
 % simulate vehicle based on optimal control inputs
-[x_nd, u, tauf_nd] = extract_state(zopt, N);
-tauf               = tauf_nd * T_char;
-x_uuv              = x_nd(1:3, :) .* [L_char; L_char; 1];
-x_cov              = x_nd(4:end,:);
+[x_nd, u_nd, tauf_nd] = extract_state(zopt, N);
+tauf                  = tauf_nd * T_char;
+u                     = u_nd .* [max_speed; max_steer];
+x_uuv                 = x_nd(1:3, :) .* [L_char; L_char; pi];
 
-dynfun_uuv_dim = @(tau, x, u) uuv_dynamics(tau, x, u, current_field, wheelbase, max_speed, max_steer);
-[t_s, x_s]     = lpm.simulate(x0, u, tauf, dynfun_uuv_dim);
-t_i            = linspace(0, tauf, 100);
-x_i            = lpm.interpolate(x_uuv, t_i, tauf);
+dynfun_uuv = @(tau, x, u) uuv_dynamics(tau, x, u, current_field, wheelbase);
+[t_s, x_s] = lpm.simulate(x0, u, tauf, dynfun_uuv);
+t_i        = linspace(0, tauf, 100);
+x_i        = lpm.interpolate(x_uuv, t_i, tauf);
 
 % plot state and control input vs time
-lpm.plot_results(x_uuv, u, tauf, x0, [xf; nan], dynfun_uuv_dim);
+lpm.plot_results(x_uuv, u, tauf, x0, [xf; nan], dynfun_uuv);
 
 % sample spatial region to plot current magnitude and direction
 margin           = 0.2;
@@ -148,14 +133,11 @@ for k = 1:numel(t_i)
     clf;
     hold on;
 
-    % current speed
+    % current speed and direction
     C     = current_field(repmat(t_i(k), 1, numel(X1)), X1(:)', X2(:)');
-    speed = reshape(sqrt(C(1,:).^2 + C(2,:).^2), size(X1));
+    speed = reshape(vecnorm(C, 2, 1), size(X1));
     pcolor(X1 / 1000, X2 / 1000, speed, 'EdgeColor', 'none', 'FaceAlpha', 0.7, 'FaceColor', 'interp', 'HandleVisibility', 'off');
-
-    % current direction
-    Cq = current_field(repmat(t_i(k), 1, numel(X1)), X1(:)', X2(:)');
-    quiver(X1(:)' / 1000, X2(:)' / 1000, Cq(1,:), Cq(2,:), 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
+    quiver(X1(:)' / 1000, X2(:)' / 1000, C(1,:), C(2,:), 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
 
     % vehicle position
     idx_s = t_s <= t_i(k);
@@ -188,47 +170,65 @@ close(vid);
 
 %% compute cost function to minimize control input
 function [J] = compute_cost(z, N)
-[~, u, tauf] = extract_state(z, N);
+[~, u_nd, tauf_nd] = extract_state(z, N);
 
 w = lpm.compute_quadrature_weights(N);
-L = 0.5 * sum(u.^2, 1);
-J = (tauf / 2) * sum(w .* L);
+L = 0.5 * sum(u_nd.^2, 1);
+J = (tauf_nd / 2) * sum(w .* L);
 end
 
 %% initialize decision variables
-function [z0] = initialize_guess(N, x0, xf, L0_vec_nd)
-% non-dimensional final time guess (~2x straight-line travel time)
-tauf = 2;
+function [z0] = initialize_guess(N, x0, xf, L0_vec, L_char, T_char, max_accel, max_srate, Q)
+% straight-line travel at full-tilt
+u_nd = [ones(1, N+1); zeros(1, N+1)];
+
+% duration for straight-line travel at full-tilt
+tauf    = T_char;
+tauf_nd = tauf / T_char;
+
+% straight line interpolation for position along constant heading
+tau   = lpm.compute_collocation_points(N);
+s     = 0.5 * (tau + 1);
+xy    = x0(1:2) * (1 - s) + xf * s;
+xy_nd = xy / L_char;
 
 % heading toward goal (atan2 of east/north for compass convention)
-theta0 = atan2(xf(1) - x0(1), xf(2) - x0(2));
+theta0    = atan2(xf(1) - x0(1), xf(2) - x0(2));
+theta0_nd = theta0 / pi * ones(1, N+1);
 
-% straight line interpolation for position, constant heading, constant covariance
-tau = lpm.compute_collocation_points(N);
-s   = 0.5 * (tau + 1);
-xy  = x0(1:2) * (1 - s) + xf * s;
-x   = [xy; theta0 * ones(1, N+1); repmat(L0_vec_nd, 1, N+1)];
+% propagate covariance along straight-line constant heading trajectory
+t          = 0.5 * tauf * (tau + 1);
+[~, L_vec] = ode45(@(t, L_vec) cov_dynamics(theta0, L_vec, Q), t, L0_vec);
+max_speed  = L_char / T_char;
+D_s_vec    = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
+D_s_lvec   = L_to_lvec(D_s_vec(:) * ones(1, 8));
+L_vec_nd   = L_vec' ./ D_s_lvec;
 
-% constant half speed, zero steering (normalized)
-u = [0.5 * ones(1, N+1); zeros(1, N+1)];
-
-z0 = [x(:); u(:); tauf];
+x_nd = [xy_nd; theta0_nd; L_vec_nd];
+z0   = [x_nd(:); u_nd(:); tauf_nd];
 end
 
 %% extract state variables from decision vector
-function [x, u, tauf] = extract_state(z, N)
+function [x_nd, u_nd, tauf_nd] = extract_state(z, N)
 ix = 39 * (N + 1);
 iu = ix + 2 * (N + 1);
 
-x    = reshape(z(1:ix), 39, []);
-u    = reshape(z(ix+1:iu), 2, []);
-tauf = z(end);
+x_nd    = reshape(z(1:ix), 39, []);
+u_nd    = reshape(z(ix+1:iu), 2, []);
+tauf_nd = z(end);
 end
 
 %% compute constraints
-function [c, ceq] = nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, Q, N)
+function [c, ceq] = nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, L_char, T_char, Q, N)
 % extract state variables
-[x, u, tauf] = extract_state(z, N);
+[x_nd, u_nd, tauf_nd] = extract_state(z, N);
+
+% re-dimensionalize
+D_s_vec  = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
+D_s_lvec = L_to_lvec(D_s_vec(:) * ones(1, 8));
+u        = u_nd .* [max_speed; max_steer];
+x        = x_nd .* [L_char; L_char; pi; D_s_lvec];
+tauf     = tauf_nd * T_char;
 
 % compute collocation points
 tau = 0.5 * tauf * (lpm.compute_collocation_points(N) + 1);
@@ -239,31 +239,32 @@ D = lpm.compute_differentiation_matrix(N);
 % compute inequality constraints due to acceleration and steering rate
 % limits
 u_dot      = (2 / tauf) * u * D';
-accel      = u_dot(1,:) * max_speed;
-steer_rate = u_dot(2,:) * max_steer;
+accel      = u_dot(1,:);
+steer_rate = u_dot(2,:);
 
-c = [ accel - max_accel;
-     -accel - max_accel;
-      steer_rate - max_srate;
-     -steer_rate - max_srate]';
+c = [ (accel      - max_accel) / max_accel;
+     -(accel      + max_accel) / max_accel;
+      (steer_rate - max_srate) / max_srate;
+     -(steer_rate + max_srate) / max_srate]';
 c = c(:);
 
 % compute equality constraints due to system dynamics
+D_s_state = [L_char; L_char; pi; D_s_lvec];
 ceq       = zeros(39 * (N + 1) + 41, 1);
 ic        = 39 * (N + 1);
-ceq(1:ic) = reshape(x * D' - 0.5 * tauf * system_dynamics(tau, x, u, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, Q), [], 1);
+ceq(1:ic) = reshape((x * D' - 0.5 * tauf * system_dynamics(tau, x, u, current_field, wheelbase, Q)) ./ D_s_state, [], 1);
 
 % compute equality constraints due to boundary conditions
-ceq(ic+1:ic+3)   = x(1:3,   1) - x0;     % initial vehicle state
-ceq(ic+4:ic+39)  = x(4:end, 1) - L0_vec; % initial error covariance
-ceq(ic+40:ic+41) = x(1:2,  end) - xf;    % final vehicle state
+ceq(ic+1:ic+3)   = (x(1:3,   1) - x0) ./ [L_char; L_char; pi]; % initial vehicle state
+ceq(ic+4:ic+39)  = (x(4:end, 1) - L0_vec) ./ D_s_lvec;         % initial error covariance
+ceq(ic+40:ic+41) = (x(1:2,  end) - xf) / L_char;               % final vehicle state
 end
 
 %% uuv dynamics of kinematic vehicle with current
-function [xdot] = uuv_dynamics(tau, x, u, current_field, wheelbase, max_speed, max_steer)
+function [xdot] = uuv_dynamics(tau, x, u, current_field, wheelbase)
 theta = x(3,:);
-v     = u(1,:) * max_speed;
-delta = u(2,:) * max_steer;
+v     = u(1,:);
+delta = u(2,:);
 c     = current_field(tau, x(1,:), x(2,:));
 
 xdot = [v .* sin(theta) + c(1,:);
@@ -272,13 +273,13 @@ xdot = [v .* sin(theta) + c(1,:);
 end
 
 %% covariance dynamics
-function [Ldot_vec] = cov_dynamics(psi, x_cov, max_accel_nd, max_srate_nd, Q)
-n_pts    = size(x_cov, 2);
-Ldot_vec = zeros(36, n_pts);
+function [Ldot_vec] = cov_dynamics(psi, L_vec, Q)
+N        = size(L_vec, 2);
+Ldot_vec = zeros(36, N);
 
-for k = 1:n_pts
+for k = 1:N
     % form covariance matrix from cholesky factorization
-    L = lvec_to_L(x_cov(:, k));
+    L = lvec_to_L(L_vec(:, k));
     P = L * L';
 
     % form non-dimensional linearized dynamics Jacobian
@@ -288,11 +289,11 @@ for k = 1:n_pts
 
     F(1, 3) = 1;
     F(2, 4) = 1;
-    F(3, 6) = max_accel_nd * cp;
-    F(3, 7) = -max_accel_nd * sp;
-    F(4, 6) = max_accel_nd * sp;
-    F(4, 7) = max_accel_nd * cp;
-    F(5, 8) = max_srate_nd;
+    F(3, 6) = cp;
+    F(3, 7) = -sp;
+    F(4, 6) = sp;
+    F(4, 7) = cp;
+    F(5, 8) = 1;
 
     % compute covariance derivative using differential lyapunov function
     Pdot = F * P + P * F' + Q;
@@ -306,9 +307,9 @@ end
 end
 
 %% full system dynamics
-function [xdot] = system_dynamics(tau, x, u, current_field, wheelbase, max_speed, max_steer, max_accel_nd, max_srate_nd, Q)
-xdot = [uuv_dynamics(tau, x(1:3,:), u, current_field, wheelbase, max_speed, max_steer);
-        cov_dynamics(x(3,:), x(4:end,:), max_accel_nd, max_srate_nd, Q)];
+function [xdot] = system_dynamics(tau, x, u, current_field, wheelbase, Q)
+xdot = [uuv_dynamics(tau, x(1:3,:), u, current_field, wheelbase);
+        cov_dynamics(x(3,:), x(4:end,:), Q)];
 end
 
 %% lower triangular matrix <==> lower triangular element vector
