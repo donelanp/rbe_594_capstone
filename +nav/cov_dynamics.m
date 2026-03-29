@@ -1,4 +1,4 @@
-function Ldot_vec = cov_dynamics(psi, L_vec, Q)
+function Ldot_vec = cov_dynamics(psi, L_vec, Q, H, R)
 % Compute time derivative of the Cholesky factor of the INS error covariance.
 %
 % The error state is [dp_N, dp_E, dv_N, dv_E, dpsi, bax, bay, bgz], where
@@ -9,6 +9,8 @@ function Ldot_vec = cov_dynamics(psi, L_vec, Q)
 %   psi   - vehicle yaw (1 x n) [rad]
 %   L_vec - lower Cholesky factor of error covariance, vectorized (36 x n)
 %   Q     - process noise covariance matrix (8 x 8)
+%   H     - measurement Jacobian (m x 8)
+%   R     - measurement noise covariance matrix (m x m)
 %
 % Outputs:
 %   Ldot_vec - time derivative of lower Cholesky factor of error covariance, vectorized (36 x n)
@@ -32,7 +34,7 @@ for k = 1:N
     F(4, 7) = cp;
     F(5, 8) = 1;
 
-    Pdot = F * P + P * F' + Q;
+    Pdot = F * P + P * F' + Q - P * H' * (R \ (H * P));
 
     M              = L \ Pdot / L';
     S              = tril(M, -1) + 0.5 * diag(diag(M));

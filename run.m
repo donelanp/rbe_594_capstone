@@ -54,6 +54,14 @@ S_bad = (5.585216e-6 * g) ^ 2;                  % accelerometer bias instability
 S_bgd = (deg2rad(10.501290) / 3600 / 3600) ^ 2; % gyroscope bias instability [rad^2/s^3]
 Q     = diag([0, 0, S_ra, S_ra, S_rg, S_bad, S_bad, S_bgd]);
 
+% DVL and compass measurement model for error state
+% [dp_N, dp_E, dv_N, dv_E, dpsi, bax, bay, bgz]
+sigma_dvl     = 0.01;         % DVL velocity noise std [m/s]
+sigma_compass = deg2rad(0.5); % compass heading noise std [rad]
+
+H = [zeros(2, 2), -eye(2, 2), zeros(2, 4); zeros(1, 4), -1, zeros(1,3)];
+R = diag([sigma_dvl, sigma_dvl, sigma_compass] .^ 2);
+
 % initial covariance P0 and its lower cholesky factor L0 (P0 = L0*L0')
 sigma_p   = 10;                    % initial position std [m]
 sigma_v   = 0.1;                   % initial velocity std [m/s]
@@ -75,10 +83,10 @@ cost = @(z) compute_cost(z, N);
 % x_nd = [pE_nd (1); pN_nd (1); theta_nd (1); L_vec_nd (36)]
 % u_nd = [v_nd (1); δ_nd (1)]
 % z    = [x_nd (39*(N+1)); u_nd (2*(N+1)); tauf_nd (1)]
-constraints = @(z) nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, L_char, T_char, Q, N);
+constraints = @(z) nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, L_char, T_char, Q, H, R, N);
 
 % initial guess
-z0 = initialize_guess(N, x0, xf, L0_vec, L_char, T_char, max_accel, max_srate, Q);
+z0 = initialize_guess(N, x0, xf, L0_vec, L_char, T_char, max_accel, max_srate, Q, H, R);
 
 % decision variable bounds
 diag_ind = [1, 9, 16, 22, 27, 31, 34, 36];
@@ -178,7 +186,7 @@ J = (tauf_nd / 2) * sum(w .* L);
 end
 
 %% initialize decision variables
-function [z0] = initialize_guess(N, x0, xf, L0_vec, L_char, T_char, max_accel, max_srate, Q)
+function [z0] = initialize_guess(N, x0, xf, L0_vec, L_char, T_char, max_accel, max_srate, Q, H, R)
 % straight-line travel at full-tilt
 u_nd = [ones(1, N+1); zeros(1, N+1)];
 
@@ -198,7 +206,7 @@ theta0_nd = theta0 / pi * ones(1, N+1);
 
 % propagate covariance along straight-line constant heading trajectory
 t          = 0.5 * tauf * (tau + 1);
-[~, L_vec] = ode45(@(t, L_vec) nav.cov_dynamics(theta0, L_vec, Q), t, L0_vec);
+[~, L_vec] = ode45(@(t, L_vec) nav.cov_dynamics(theta0, L_vec, Q, H, R), t, L0_vec);
 max_speed  = L_char / T_char;
 D_s_vec    = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
 D_s_lvec   = utils.L_to_lvec(D_s_vec(:) * ones(1, 8));
@@ -219,7 +227,7 @@ tauf_nd = z(end);
 end
 
 %% compute constraints
-function [c, ceq] = nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, L_char, T_char, Q, N)
+function [c, ceq] = nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, L_char, T_char, Q, H, R, N)
 % extract state variables
 [x_nd, u_nd, tauf_nd] = extract_state(z, N);
 
@@ -252,7 +260,7 @@ c = c(:);
 D_s_state = [L_char; L_char; pi; D_s_lvec];
 ceq       = zeros(39 * (N + 1) + 41, 1);
 ic        = 39 * (N + 1);
-ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Q)) ./ D_s_state, [], 1);
+ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Q, H, R)) ./ D_s_state, [], 1);
 
 % compute equality constraints due to boundary conditions
 ceq(ic+1:ic+3)   = (x(1:3,   1) - x0) ./ [L_char; L_char; pi]; % initial vehicle state
