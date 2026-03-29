@@ -62,7 +62,7 @@ sigma_ba  = 30e-6 * g;             % initial accel bias std [m/s^2]
 sigma_bg  = deg2rad(0.001) / 3600; % initial gyro bias std [rad/s]
 P0        = diag([sigma_p, sigma_p, sigma_v, sigma_v, sigma_psi, sigma_ba, sigma_ba, sigma_bg] .^ 2);
 L0        = chol(P0, 'lower');
-L0_vec    = L_to_lvec(L0);
+L0_vec    = utils.L_to_lvec(L0);
 
 % parameters used for non-dimensionalization
 L_char = norm(xf - x0(1:2)); % characteristic length [m]
@@ -99,7 +99,7 @@ tauf                  = tauf_nd * T_char;
 u                     = u_nd .* [max_speed; max_steer];
 x_uuv                 = x_nd(1:3, :) .* [L_char; L_char; pi];
 
-dynfun_uuv = @(tau, x, u) uuv_dynamics(tau, x, u, current_field, wheelbase);
+dynfun_uuv = @(tau, x, u) nav.uuv_dynamics(tau, x, u, current_field, wheelbase);
 [t_s, x_s] = lpm.simulate(x0, u, tauf, dynfun_uuv);
 t_i        = linspace(0, tauf, 100);
 x_i        = lpm.interpolate(x_uuv, t_i, tauf);
@@ -198,10 +198,10 @@ theta0_nd = theta0 / pi * ones(1, N+1);
 
 % propagate covariance along straight-line constant heading trajectory
 t          = 0.5 * tauf * (tau + 1);
-[~, L_vec] = ode45(@(t, L_vec) cov_dynamics(theta0, L_vec, Q), t, L0_vec);
+[~, L_vec] = ode45(@(t, L_vec) nav.cov_dynamics(theta0, L_vec, Q), t, L0_vec);
 max_speed  = L_char / T_char;
 D_s_vec    = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
-D_s_lvec   = L_to_lvec(D_s_vec(:) * ones(1, 8));
+D_s_lvec   = utils.L_to_lvec(D_s_vec(:) * ones(1, 8));
 L_vec_nd   = L_vec' ./ D_s_lvec;
 
 x_nd = [xy_nd; theta0_nd; L_vec_nd];
@@ -225,7 +225,7 @@ function [c, ceq] = nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_spe
 
 % re-dimensionalize
 D_s_vec  = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
-D_s_lvec = L_to_lvec(D_s_vec(:) * ones(1, 8));
+D_s_lvec = utils.L_to_lvec(D_s_vec(:) * ones(1, 8));
 u        = u_nd .* [max_speed; max_steer];
 x        = x_nd .* [L_char; L_char; pi; D_s_lvec];
 tauf     = tauf_nd * T_char;
@@ -252,72 +252,10 @@ c = c(:);
 D_s_state = [L_char; L_char; pi; D_s_lvec];
 ceq       = zeros(39 * (N + 1) + 41, 1);
 ic        = 39 * (N + 1);
-ceq(1:ic) = reshape((x * D' - 0.5 * tauf * system_dynamics(tau, x, u, current_field, wheelbase, Q)) ./ D_s_state, [], 1);
+ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Q)) ./ D_s_state, [], 1);
 
 % compute equality constraints due to boundary conditions
 ceq(ic+1:ic+3)   = (x(1:3,   1) - x0) ./ [L_char; L_char; pi]; % initial vehicle state
 ceq(ic+4:ic+39)  = (x(4:end, 1) - L0_vec) ./ D_s_lvec;         % initial error covariance
 ceq(ic+40:ic+41) = (x(1:2,  end) - xf) / L_char;               % final vehicle state
-end
-
-%% uuv dynamics of kinematic vehicle with current
-function [xdot] = uuv_dynamics(tau, x, u, current_field, wheelbase)
-theta = x(3,:);
-v     = u(1,:);
-delta = u(2,:);
-c     = current_field(tau, x(1,:), x(2,:));
-
-xdot = [v .* sin(theta) + c(1,:);
-        v .* cos(theta) + c(2,:);
-        (v / wheelbase) .* tan(delta)];
-end
-
-%% covariance dynamics
-function [Ldot_vec] = cov_dynamics(psi, L_vec, Q)
-N        = size(L_vec, 2);
-Ldot_vec = zeros(36, N);
-
-for k = 1:N
-    % form covariance matrix from cholesky factorization
-    L = lvec_to_L(L_vec(:, k));
-    P = L * L';
-
-    % form non-dimensional linearized dynamics Jacobian
-    cp = cos(psi(k));
-    sp = sin(psi(k));
-    F  = zeros(8);
-
-    F(1, 3) = 1;
-    F(2, 4) = 1;
-    F(3, 6) = cp;
-    F(3, 7) = -sp;
-    F(4, 6) = sp;
-    F(4, 7) = cp;
-    F(5, 8) = 1;
-
-    % compute covariance derivative using differential lyapunov function
-    Pdot = F * P + P * F' + Q;
-
-    % compute derivative of cholesky factorization
-    M              = L \ Pdot / L';
-    S              = tril(M, -1) + 0.5 * diag(diag(M));
-    Ldot           = L * S;
-    Ldot_vec(:, k) = L_to_lvec(Ldot);
-end
-end
-
-%% full system dynamics
-function [xdot] = system_dynamics(tau, x, u, current_field, wheelbase, Q)
-xdot = [uuv_dynamics(tau, x(1:3,:), u, current_field, wheelbase);
-        cov_dynamics(x(3,:), x(4:end,:), Q)];
-end
-
-%% lower triangular matrix <==> lower triangular element vector
-function [l_vec] = L_to_lvec(L)
-l_vec = L(tril(true(8,8)));
-end
-
-function [L] = lvec_to_L(l_vec)
-L                  = zeros(8,8);
-L(tril(true(8,8))) = l_vec;
 end
