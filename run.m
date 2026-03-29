@@ -73,8 +73,11 @@ L0        = chol(P0, 'lower');
 L0_vec    = utils.L_to_lvec(L0);
 
 % parameters used for non-dimensionalization
-L_char = norm(xf - x0(1:2)); % characteristic length [m]
-T_char = L_char / max_speed; % characteristic time [s]
+L_char     = norm(xf - x0(1:2)); % characteristic length [m]
+T_char     = L_char / max_speed; % characteristic time [s]
+Gamma_err  = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
+Gamma_lvec = utils.L_to_lvec(Gamma_err(:) * ones(1, 8));
+Gamma      = [L_char; L_char; pi; Gamma_lvec];
 
 % cost function
 cost = @(z) compute_cost(z, N);
@@ -83,10 +86,10 @@ cost = @(z) compute_cost(z, N);
 % x_nd = [pE_nd (1); pN_nd (1); theta_nd (1); L_vec_nd (36)]
 % u_nd = [v_nd (1); δ_nd (1)]
 % z    = [x_nd (39*(N+1)); u_nd (2*(N+1)); tauf_nd (1)]
-constraints = @(z) nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, L_char, T_char, Q, H, R, N);
+constraints = @(z) nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Q, H, R, N);
 
 % initial guess
-z0 = initialize_guess(N, x0, xf, L0_vec, L_char, T_char, max_accel, max_srate, Q, H, R);
+z0 = initialize_guess(N, x0, xf, L0_vec, T_char, Q, H, R, Gamma);
 
 % decision variable bounds
 diag_ind = [1, 9, 16, 22, 27, 31, 34, 36];
@@ -186,7 +189,7 @@ J = (tauf_nd / 2) * sum(w .* L);
 end
 
 %% initialize decision variables
-function [z0] = initialize_guess(N, x0, xf, L0_vec, L_char, T_char, max_accel, max_srate, Q, H, R)
+function [z0] = initialize_guess(N, x0, xf, L0_vec, T_char, Q, H, R, Gamma)
 % straight-line travel at full-tilt
 u_nd = [ones(1, N+1); zeros(1, N+1)];
 
@@ -195,24 +198,18 @@ tauf    = T_char;
 tauf_nd = tauf / T_char;
 
 % straight line interpolation for position along constant heading
-tau   = lpm.compute_collocation_points(N);
-s     = 0.5 * (tau + 1);
-xy    = x0(1:2) * (1 - s) + xf * s;
-xy_nd = xy / L_char;
+tau = lpm.compute_collocation_points(N);
+s   = 0.5 * (tau + 1);
+xy  = x0(1:2) * (1 - s) + xf * s;
 
 % heading toward goal (atan2 of east/north for compass convention)
-theta0    = atan2(xf(1) - x0(1), xf(2) - x0(2));
-theta0_nd = theta0 / pi * ones(1, N+1);
+theta0 = atan2(xf(1) - x0(1), xf(2) - x0(2)) * ones(1, N+1);
 
 % propagate covariance along straight-line constant heading trajectory
 t          = 0.5 * tauf * (tau + 1);
 [~, L_vec] = ode45(@(t, L_vec) nav.cov_dynamics(theta0, L_vec, Q, H, R), t, L0_vec);
-max_speed  = L_char / T_char;
-D_s_vec    = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
-D_s_lvec   = utils.L_to_lvec(D_s_vec(:) * ones(1, 8));
-L_vec_nd   = L_vec' ./ D_s_lvec;
 
-x_nd = [xy_nd; theta0_nd; L_vec_nd];
+x_nd = [xy; theta0; L_vec'] ./ Gamma;
 z0   = [x_nd(:); u_nd(:); tauf_nd];
 end
 
@@ -227,16 +224,14 @@ tauf_nd = z(end);
 end
 
 %% compute constraints
-function [c, ceq] = nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, L_char, T_char, Q, H, R, N)
+function [c, ceq] = nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Q, H, R, N)
 % extract state variables
 [x_nd, u_nd, tauf_nd] = extract_state(z, N);
 
 % re-dimensionalize
-D_s_vec  = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
-D_s_lvec = utils.L_to_lvec(D_s_vec(:) * ones(1, 8));
-u        = u_nd .* [max_speed; max_steer];
-x        = x_nd .* [L_char; L_char; pi; D_s_lvec];
-tauf     = tauf_nd * T_char;
+u    = u_nd .* [max_speed; max_steer];
+x    = x_nd .* Gamma;
+tauf = tauf_nd * T_char;
 
 % compute collocation points
 tau = 0.5 * tauf * (lpm.compute_collocation_points(N) + 1);
@@ -257,13 +252,12 @@ c = [ (accel      - max_accel) / max_accel;
 c = c(:);
 
 % compute equality constraints due to system dynamics
-D_s_state = [L_char; L_char; pi; D_s_lvec];
 ceq       = zeros(39 * (N + 1) + 41, 1);
 ic        = 39 * (N + 1);
-ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Q, H, R)) ./ D_s_state, [], 1);
+ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Q, H, R)) ./ Gamma, [], 1);
 
 % compute equality constraints due to boundary conditions
-ceq(ic+1:ic+3)   = (x(1:3,   1) - x0) ./ [L_char; L_char; pi]; % initial vehicle state
-ceq(ic+4:ic+39)  = (x(4:end, 1) - L0_vec) ./ D_s_lvec;         % initial error covariance
-ceq(ic+40:ic+41) = (x(1:2,  end) - xf) / L_char;               % final vehicle state
+ceq(ic+1:ic+3)   = (x(1:3,   1) - x0) ./ Gamma(1:3);       % initial vehicle state
+ceq(ic+4:ic+39)  = (x(4:end, 1) - L0_vec) ./ Gamma(4:end); % initial error covariance
+ceq(ic+40:ic+41) = (x(1:2,  end) - xf) ./ Gamma(1:2);      % final vehicle state
 end
