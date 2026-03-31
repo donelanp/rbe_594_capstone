@@ -1,31 +1,82 @@
-% Define sample time and total steps
-sampleTime = 0.01;
-totalTime = 30; % seconds
-numSteps = totalTime / sampleTime;
-% Create a time vector
+enable_current = true;
+
+maxVelocity = 2; % m/s
+%% populate reference positions over time
+if ~exist("x_i",'var')
+
+    % Define sample time and total steps (simple case
+    
+    total_time = 30; % seconds
+    
+
+    positions_x = [0 1 4];
+    positions_y = [0 2 5];
+    positions_z = [0 0 0];
+    ref_times = [0 10 total_time];
+
+% use ref states from offline_planner
+else
+    % x_i is a 3xN list of positions
+    % Ensure x_i is defined and has the correct dimensions
+    if size(x_i, 1) ~= 3
+        error('x_i must be a 3xN matrix of positions.');
+    end
+    % normalize
+    max_value = (max(abs(x_i),[],"all"))/9;
+    positions_x = x_i(1,:)' ./ max_value;
+    positions_y = x_i(2,:)' ./ max_value;
+    positions_z = x_i(3,:)' ./ max_value;
+    % set starting point to 0,0,0
+    start_value = x_i(:,1) ./ max_value;
+    positions_x = positions_x - start_value(1);
+    positions_y = positions_y - start_value(2);
+    positions_z = positions_z - start_value(3);
+
+    % assign data to x_i
+    start_pos = [positions_x(1,1);positions_y(1,1);positions_z(1,1)];
+    end_pos = [positions_x(end,1);positions_y(end,1);positions_z(end,1)];
+    total_distance = norm(start_pos-end_pos);
+    total_time = total_distance / (maxVelocity*0.5);  % in seconds
+
+    % create ref_times based on position data
+    ref_times = linspace(0, total_time-5, size(x_i, 2));
+
+end
+
+%% Create a time/reference vector for the entire length of the simulation
+sampleTime = total_time * 0.001;
+numSteps = round(total_time / sampleTime);
 time = sampleTime * (0:numSteps-1)';
+set_param('ON', 'StopTime', num2str(total_time));
 
-% populate reference positions over time
-positions_x = [0 1 4];
-positions_y = [0 2 5];
-positions_z = [0 3 6];
-ref_times = [0 10 20];
-
-ref_positions_x = zeros(size(time));
-ref_positions_y = zeros(size(time));
-ref_positions_z = zeros(size(time));
+% create a ref position for each time step
+ref_positions_x = zeros(numSteps,1);
+ref_positions_y = zeros(numSteps,1);
+ref_positions_z = zeros(numSteps,1);
 for i=2:length(ref_times)
-    start_ind = (ref_times(i-1) / sampleTime)+1;
-    end_ind = (ref_times(i) / sampleTime);
+    start_ind = round(ref_times(i-1) / sampleTime)+1;
+    end_ind = round(ref_times(i) / sampleTime);
     ref_positions_x(start_ind:end_ind) = positions_x(i);
     ref_positions_y(start_ind:end_ind) = positions_y(i);
     ref_positions_z(start_ind:end_ind) = positions_z(i);
+    if i == length(ref_times)
+        ref_positions_x(end_ind+1:end) = positions_x(i);
+        ref_positions_y(end_ind+1:end) = positions_y(i);
+        ref_positions_z(end_ind+1:end) = positions_z(i);
+    end
 end
 
+% create data, which is the 3D reference positions of the uuv
 data = [ ref_positions_x, ...
          ref_positions_y, ...
          ref_positions_z ];
+% plot3(data(:,1),data(:,2),data(:,3));
+total_distance = norm(data(1,:)-data(end,:));
 
-
-% Create a timeseries object and assign it to a variable (e.g., 'simin')
+%% Create a timeseries object and assign it to a variable (e.g., 'simin')
+% create timeseries object
 simin = timeseries(data, time); 
+% Initialize the timeseries object with appropriate properties
+simin.Name = 'Reference Positions';
+simin.TimeInfo.Units = 'seconds';
+simin.DataInfo.Units = 'meters';
