@@ -27,7 +27,7 @@ function mdlInitializeSizes(block)
 
     % Override input port properties
     block.InputPort(1).DatatypeID = 0;
-    block.InputPort(1).Dimensions = 6;
+    block.InputPort(1).Dimensions = 9;
     block.InputPort(1).DirectFeedthrough = false;
     
     %
@@ -91,9 +91,9 @@ function mdlInitializeSizes(block)
         % 2D
         view(handle.axes(1),2);
     end
-    xlabel(handle.axes(1),'X (m)');
-    ylabel(handle.axes(1),'Y (m)');
-    zlabel(handle.axes(1),'Z (m)');
+    xlabel(handle.axes(1),'X');
+    ylabel(handle.axes(1),'Y');
+    zlabel(handle.axes(1),'Z');
 
     %
     % Initialize Time & Utilities for back-stepping support
@@ -158,6 +158,15 @@ function mdlUpdate(block)
         return
     end
 
+    hold on;
+    if Config.dimension==1
+        % 3D
+        plot3(handle.axes(1),u(7),u(8),u(9),'y*');
+    else
+        % 2D
+        plot(handle.axes(1),u(7),u(8),'y*'); 
+    end
+    legend('UUV','Local Goal Points');
     %
     % Form Transformation Matrix
     %
@@ -195,10 +204,12 @@ end
 
 function [x,y,z]=bodyShape    
 % Function to draw shape of body
-    xyz = 2*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
-             0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
-             0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
-    
+    % xyz = 2*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
+    %          0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
+    %          0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
+    xyz = 0.02*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
+                0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
+                0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
     x = xyz(1,:);
     y = xyz(2,:);
     z = xyz(3,:);
