@@ -22,13 +22,17 @@ function mdlInitializeSizes(block)
     Config = block.DialogPrm(1).Data;
 
     % Register number of ports
-    block.NumInputPorts = 1;
+    block.NumInputPorts = 2;
     block.NumOutputPorts = 0;
 
     % Override input port properties
     block.InputPort(1).DatatypeID = 0;
-    block.InputPort(1).Dimensions = 9;
+    block.InputPort(1).Dimensions = 6;
     block.InputPort(1).DirectFeedthrough = false;
+
+    block.InputPort(2).DatatypeID = 0;
+    block.InputPort(2).Dimensions = 3;
+    block.InputPort(2).DirectFeedthrough = false;
     
     %
     % initialize the array of sample times
@@ -74,12 +78,48 @@ function mdlInitializeSizes(block)
         delete(h_del);
         figure(h_anim);
     end
+
     %
     % Initialize Axes
     %
     handle.axes(1)=axes;
+
+    % default simulation bounds
+    x_lims = [-2 12];
+    y_lims = [-2 12];
+    z_lims = [-2 12];
+
+    if ~isempty(Config.water_current_params)
+        x_lims_water = [ Config.water_current_params.x1_min ...
+                   Config.water_current_params.x1_max ];
+        y_lims_water = [ Config.water_current_params.x2_min ...
+                   Config.water_current_params.x2_max ];
+        % plot current speed
+        current_field = Config.water_current_params.field;
+        x1 = linspace(x_lims_water(1), x_lims_water(2), 41);
+        x2 = linspace(y_lims_water(1), y_lims_water(2), 41);
+        [X1, X2]         = meshgrid(x1, x2);
+        C     = current_field(zeros(1, numel(X1)), X1(:)', X2(:)');
+        speed = reshape(sqrt(C(1,:).^2 + C(2,:).^2), [41,41]);
+        m_to_km = 1000;
+      
+        % x_lims = [0 (abs(X1(1,1)) + Config.water_current_params.x1_max)/m_to_km];
+        % y_lims = [0 (abs(X2(1,1)) + Config.water_current_params.x2_max)/m_to_km];
+        x_lims = x_lims_water / m_to_km;
+        y_lims = y_lims_water / m_to_km;
+
+        % X1 = X1 - X1(1,1);
+        % X2 = X2 - X2(1,1);
+        hold on;
+        pcolor(handle.axes(1),X1/m_to_km, X2/m_to_km, speed, 'EdgeColor',  'none', 'FaceAlpha', 0.7, 'FaceColor', 'interp', 'HandleVisibility', 'off');
+        colorbar;
+        % plot current direction
+        quiver(handle.axes(1),X1(:)'/m_to_km, X2(:)'/m_to_km, C(1,:), C(2,:), 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
+    end
+
+    
     set(handle.axes(1),'visible','on', ...
-       'xLim',[-2 12],'yLim',[-2 12],'zLim',[-2 12],...
+       'xLim',x_lims,'yLim',y_lims,'zLim',z_lims,...
        'xGrid','on','yGrid','on','zGrid','on',...
        'units','normal', ...
        'clipping','off');
@@ -91,9 +131,10 @@ function mdlInitializeSizes(block)
         % 2D
         view(handle.axes(1),2);
     end
-    xlabel(handle.axes(1),'X');
-    ylabel(handle.axes(1),'Y');
-    zlabel(handle.axes(1),'Z');
+    xlabel(handle.axes(1),'X (km)');
+    ylabel(handle.axes(1),'Y (km)');
+    zlabel(handle.axes(1),'Z (km)');
+
 
     %
     % Initialize Time & Utilities for back-stepping support
@@ -142,6 +183,7 @@ end
 %
 function mdlUpdate(block)
     u = block.InputPort(1).Data;
+    reference_position = block.InputPort(2).Data;
     Config = block.DialogPrm(1).Data;
     
     if ~Config.Animenable
@@ -161,12 +203,13 @@ function mdlUpdate(block)
     hold on;
     if Config.dimension==1
         % 3D
-        plot3(handle.axes(1),u(7),u(8),u(9),'y*');
+        plot3(handle.axes(1),reference_position(1),reference_position(2),reference_position(3),'y*');
     else
         % 2D
-        plot(handle.axes(1),u(7),u(8),'y*'); 
+        plot(handle.axes(1),reference_position(1),reference_position(2),'y*'); 
     end
-    legend('UUV','Local Goal Points');
+    legend('UUV','Local Goal Points','Location','northwest');
+
     %
     % Form Transformation Matrix
     %
@@ -207,7 +250,7 @@ function [x,y,z]=bodyShape
     % xyz = 2*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
     %          0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
     %          0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
-    xyz = 0.02*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
+    xyz = 20*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
                 0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
                 0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
     x = xyz(1,:);

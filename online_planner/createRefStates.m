@@ -13,6 +13,7 @@ if ~exist("x_i",'var')
     positions_y = [0 2 5];
     positions_z = [0 0 0];
     ref_times = [0 10 total_time];
+    water_current_params = [];
 
 % use ref states from offline_planner
 else
@@ -22,29 +23,43 @@ else
         error('x_i must be a 3xN matrix of positions.');
     end
     % normalize
-    max_value = (max(abs(x_i),[],"all"))/9;
-    positions_x = x_i(1,:)' ./ max_value;
-    positions_y = x_i(2,:)' ./ max_value;
-    positions_z = x_i(3,:)' ./ max_value;
+    % max_value = (max(abs(x_i),[],"all"))/9;
+    m_to_km = 1000;
+    positions_x = x_i(1,:)' ./ m_to_km;
+    positions_y = x_i(2,:)' ./ m_to_km;
+    positions_z = x_i(3,:)' ./ m_to_km;
     % set starting point to 0,0,0
-    start_value = x_i(:,1) ./ max_value;
+    % start_value = x_i(:,1) ./ m_to_km;
+    % positions_x = positions_x - start_value(1);
+    % positions_y = positions_y - start_value(2);
+    % positions_z = positions_z - start_value(3);
+    start_value = [0 0 0];
     positions_x = positions_x - start_value(1);
     positions_y = positions_y - start_value(2);
     positions_z = positions_z - start_value(3);
+
 
     % assign data to x_i
     start_pos = [positions_x(1,1);positions_y(1,1);positions_z(1,1)];
     end_pos = [positions_x(end,1);positions_y(end,1);positions_z(end,1)];
     total_distance = norm(start_pos-end_pos);
-    total_time = total_distance / (maxVelocity*0.5);  % in seconds
+    total_time = (total_distance / (0.001*maxVelocity*0.5))/3600;  % in hours
 
     % create ref_times based on position data
     ref_times = linspace(0, total_time-5, size(x_i, 2));
 
+    % populate simulation map
+    water_current_params.field = current_field;
+    water_current_params.x1_min = (x1_min + x1_min*0.2);
+    water_current_params.x1_max = (x1_max + x1_max*0.2);
+    water_current_params.x2_min = (x2_min + x2_min*0.2);
+    water_current_params.x2_max = (x2_max + x2_max*0.2);
+
 end
 
 %% Create a time/reference vector for the entire length of the simulation
-sampleTime = total_time * 0.001;
+sampleTime = round(total_time * 0.001);
+sampleTime = 0.1;
 numSteps = round(total_time / sampleTime);
 time = sampleTime * (0:numSteps-1)';
 set_param('ON', 'StopTime', num2str(total_time));
@@ -78,5 +93,5 @@ total_distance = norm(data(1,:)-data(end,:));
 simin = timeseries(data, time); 
 % Initialize the timeseries object with appropriate properties
 simin.Name = 'Reference Positions';
-simin.TimeInfo.Units = 'seconds';
-simin.DataInfo.Units = 'meters';
+simin.TimeInfo.Units = 'hours';
+simin.DataInfo.Units = 'kilometers';

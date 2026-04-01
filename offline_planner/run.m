@@ -117,7 +117,7 @@ for k = 1:numel(t_i)
     pcolor(X1 / 1000, X2 / 1000, speed, 'EdgeColor',  'none', 'FaceAlpha', 0.7, 'FaceColor', 'interp', 'HandleVisibility', 'off');
 
     % current direction
-    Cq = current_field(repmat(t_i(k), 1, numel(X1)), X1(:)', X2(:)');
+    Cq    = current_field(repmat(t_i(k), 1, numel(X1)), X1(:)', X2(:)');
     quiver(X1(:)' / 1000, X2(:)' / 1000, Cq(1,:), Cq(2,:), 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
 
     % vehicle position
