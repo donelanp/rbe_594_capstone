@@ -111,8 +111,8 @@ function mdlInitializeSizes(block)
         % X1 = X1 - X1(1,1);
         % X2 = X2 - X2(1,1);
         hold on;
-        pcolor(handle.axes(1),X1/m_to_km, X2/m_to_km, speed, 'EdgeColor',  'none', 'FaceAlpha', 0.7, 'FaceColor', 'interp', 'HandleVisibility', 'off');
-        colorbar;
+        % pcolor(handle.axes(1),X1/m_to_km, X2/m_to_km, speed, 'EdgeColor',  'none', 'FaceAlpha', 0.7, 'FaceColor', 'interp', 'HandleVisibility', 'off');
+        % colorbar;
         % plot current direction
         quiver(handle.axes(1),X1(:)'/m_to_km, X2(:)'/m_to_km, C(1,:), C(2,:), 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
     end
@@ -200,13 +200,21 @@ function mdlUpdate(block)
         return
     end
 
-    hold on;
-    if Config.dimension==1
-        % 3D
-        plot3(handle.axes(1),reference_position(1),reference_position(2),reference_position(3),'y*');
-    else
-        % 2D
-        plot(handle.axes(1),reference_position(1),reference_position(2),'y*'); 
+    persistent reference_position_prev
+    if isempty(reference_position_prev)
+        reference_position_prev = [0; 0; 0];
+    end
+
+    if reference_position_prev ~= reference_position
+        hold on;
+        if Config.dimension==1
+            % 3D
+            plot3(handle.axes(1),reference_position(1),reference_position(2),reference_position(3),'y*');
+        else
+            % 2D
+            plot(handle.axes(1),reference_position(1),reference_position(2),'y*'); 
+        end
+        reference_position_prev = reference_position;
     end
     legend('UUV','Local Goal Points','Location','northwest');
 
