@@ -1,4 +1,4 @@
-function xdot = uuv_dynamics(t, x, u, current_field, wheelbase)
+function [xdot] = uuv_dynamics(t, x, u, current_field, wheelbase)
 % Compute time derivative of vehicle state under bicycle kinematic model with ocean current.
 %
 % Inputs:

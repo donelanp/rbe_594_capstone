@@ -1,9 +1,5 @@
-function Ldot_vec = cov_dynamics(psi, L_vec, Q, H, R)
+function [Ldot_vec] = cov_dynamics(psi, L_vec, Q, H, R)
 % Compute time derivative of the Cholesky factor of the INS error covariance.
-%
-% The error state is [dp_N, dp_E, dv_N, dv_E, dpsi, bax, bay, bgz], where
-% dp is position error [m], dv is velocity error [m/s], dpsi is heading
-% error [rad], and bax/bay/bgz are accelerometer/gyroscope biases [m/s^2, rad/s].
 %
 % Inputs:
 %   psi   - vehicle yaw (1 x n) [rad]

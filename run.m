@@ -69,40 +69,43 @@ sigma_psi = deg2rad(0.01);         % initial heading std [rad]
 sigma_ba  = 30e-6 * g;             % initial accel bias std [m/s^2]
 sigma_bg  = deg2rad(0.001) / 3600; % initial gyro bias std [rad/s]
 P0        = diag([sigma_p, sigma_p, sigma_v, sigma_v, sigma_psi, sigma_ba, sigma_ba, sigma_bg] .^ 2);
-L0        = chol(P0, 'lower');
-L0_vec    = utils.L_to_lvec(L0);
+Lp0       = chol(P0(1:2, 1:2), 'lower');
+Lp0_vec   = utils.L_to_lvec(Lp0);
+
+% steady-state velocity error covariance
+Lvss_vec = nav.vel_cov_steady_state(Q, H, R);
 
 % parameters used for non-dimensionalization
-L_char     = norm(xf - x0(1:2)); % characteristic length [m]
-T_char     = L_char / max_speed; % characteristic time [s]
-Gamma_err  = [L_char, L_char, max_speed, max_speed, pi, max_accel, max_accel, max_srate];
-Gamma_lvec = utils.L_to_lvec(Gamma_err(:) * ones(1, 8));
-Gamma      = [L_char; L_char; pi; Gamma_lvec];
+L_char = norm(xf - x0(1:2)); % characteristic length [m]
+T_char = L_char / max_speed; % characteristic time [s]
+Gamma  = [L_char; L_char; pi; L_char; L_char; L_char];
 
-% cost function
-cost = @(z) compute_cost(z, N);
+% cost function weight (alpha = 0: control effort only, alpha = 1: covariance only)
+alpha = 1.0;
+cost  = @(z) compute_cost(z, N, alpha);
 
 % constraint function (dynamics and boundary conditions)
-% x_nd = [pE_nd (1); pN_nd (1); theta_nd (1); L_vec_nd (36)]
+% x_nd = [pE_nd (1); pN_nd (1); theta_nd (1); Lp_vec_nd (3)]
 % u_nd = [v_nd (1); δ_nd (1)]
-% z    = [x_nd (39*(N+1)); u_nd (2*(N+1)); tauf_nd (1)]
-constraints = @(z) nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Q, H, R, N);
+% z    = [x_nd (6*(N+1)); u_nd (2*(N+1)); tauf_nd (1)]
+constraints = @(z) nonlcon(z, x0, xf, Lp0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Lvss_vec, N);
 
 % initial guess
-z0 = initialize_guess(N, x0, xf, L0_vec, T_char, Q, H, R, Gamma);
+z0 = initialize_guess(N, x0, xf, Lp0_vec, T_char, Lvss_vec, Gamma);
 
 % decision variable bounds
-diag_ind = [1, 9, 16, 22, 27, 31, 34, 36];
-lb_state = [-Inf; -Inf; -1; -Inf(36, 1)];
-ub_state = [ Inf;  Inf;  1;  Inf(36, 1)];
-for idx = diag_ind
-    lb_state(3 + idx) = eps();
-end
+lb_state = [-Inf; -Inf; -1; eps(); -Inf; eps()];
+ub_state = [ Inf;  Inf;  1;  Inf;  Inf;  Inf];
 lb = [repmat(lb_state, N+1, 1); repmat([0; -1], N+1, 1); 0  ];
 ub = [repmat(ub_state, N+1, 1); repmat([ 1;  1], N+1, 1); Inf];
 
 % optimize
-zopt = fmincon(cost, z0, [], [], [], [], lb, ub, constraints);
+opts = optimoptions('fmincon', ...
+    'Algorithm',              'sqp', ...
+    'Display',                'iter-detailed', ...
+    'MaxIterations',          10000, ...
+    'MaxFunctionEvaluations', 10000);
+zopt = fmincon(cost, z0, [], [], [], [], lb, ub, constraints, opts);
 
 % simulate vehicle based on optimal control inputs
 [x_nd, u_nd, tauf_nd] = extract_state(zopt, N);
@@ -155,7 +158,7 @@ for k = 1:numel(t_i)
     plot(x0(1) / 1000, x0(2) / 1000, 'k^', 'LineWidth', 2, 'MarkerSize', 10, 'DisplayName', 'initial position');
     plot(xf(1) / 1000, xf(2) / 1000, 'kd', 'LineWidth', 2, 'MarkerSize', 10, 'DisplayName', 'goal position');
     plot(x_i(1,1:k) / 1000, x_i(2,1:k) / 1000, 'g-', 'LineWidth', 2, 'DisplayName', 'optimal trajectory');
-    plot(x_s(idx_s,1) / 1000, x_s(idx_s,2) / 1000, 'r--', 'LineWidth', 2, 'DisplayName', 'simulated trajectory');
+    plot(x_s(idx_s,1) / 1000, x_s(idx_s,2) / 1000, 'r--', 'LineWidth', 2, 'DisplayName', 'reconstructed trajectory');
 
     % housekeeping
     hold off;
@@ -179,17 +182,47 @@ for k = 1:numel(t_i)
 end
 close(vid);
 
-%% compute cost function to minimize control input
-function [J] = compute_cost(z, N)
-[~, u_nd, tauf_nd] = extract_state(z, N);
+% plot total position covariance vs time
+Lp_i    = lpm.interpolate(x_nd(4:6,:) .* Gamma(4:6), t_i, tauf);
+trace_i = Lp_i(1,:).^2 + Lp_i(2,:).^2 + Lp_i(3,:).^2;
 
-w = lpm.compute_quadrature_weights(N);
-L = 0.5 * sum(u_nd.^2, 1);
-J = (tauf_nd / 2) * sum(w .* L);
+theta_s        = @(t) interp1(t_s, x_s(:,3), t, 'linear', 'extrap');
+L0_vec         = utils.L_to_lvec(chol(P0, 'lower'));
+[t_rec, L_rec] = ode15s(@(t, L_vec) nav.cov_dynamics(-theta_s(t), L_vec, Q, H, R), [0, tauf], L0_vec);
+trace_rec      = zeros(size(t_rec));
+
+for k = 1:numel(t_rec)
+    Lk           = utils.lvec_to_L(L_rec(k,:)');
+    Pk           = Lk * Lk';
+    trace_rec(k) = Pk(1,1) + Pk(2,2);
+end
+
+figure('Theme', 'light', 'Color', 'w');
+hold on;
+plot(t_i / 3600, trace_i / 1e6, 'g-', 'LineWidth', 2, 'DisplayName', 'optimal covariance');
+plot(t_rec / 3600, trace_rec / 1e6, 'r--', 'LineWidth', 2, 'DisplayName', 'reconstructed covariance');
+hold off;
+xlabel('Time [hr]');
+ylabel('\sigma_{pos}^2 [km^2]');
+title('position covariance vs time');
+legend('Location', 'northwest');
+
+set(findall(gcf, '-property', 'FontSize'), 'FontSize', 16);
+set(findall(gcf, '-property', 'FontWeight'), 'FontWeight', 'bold');
+
+%% compute cost function
+function [J] = compute_cost(z, N, alpha)
+[x_nd, u_nd, tauf_nd] = extract_state(z, N);
+
+w         = lpm.compute_quadrature_weights(N);
+ctrl_cost = 0.5 * sum(u_nd.^2, 1);
+cov_cost  = x_nd(4,:).^2 + x_nd(5,:).^2 + x_nd(6,:).^2;
+L         = (1 - alpha) * ctrl_cost + alpha * cov_cost;
+J         = (tauf_nd / 2) * sum(w .* L);
 end
 
 %% initialize decision variables
-function [z0] = initialize_guess(N, x0, xf, L0_vec, T_char, Q, H, R, Gamma)
+function [z0] = initialize_guess(N, x0, xf, Lp0_vec, T_char, Lvss_vec, Gamma)
 % straight-line travel at full-tilt
 u_nd = [ones(1, N+1); zeros(1, N+1)];
 
@@ -207,24 +240,24 @@ theta0 = atan2(xf(1) - x0(1), xf(2) - x0(2)) * ones(1, N+1);
 
 % propagate covariance along straight-line constant heading trajectory
 t          = 0.5 * tauf * (tau + 1);
-[~, L_vec] = ode45(@(t, L_vec) nav.cov_dynamics(theta0, L_vec, Q, H, R), t, L0_vec);
+[~, Lp_vec] = ode45(@(t, Lp_vec) nav.pos_cov_dynamics(Lp_vec, Lvss_vec), t, Lp0_vec);
 
-x_nd = [xy; theta0; L_vec'] ./ Gamma;
+x_nd = [xy; theta0; Lp_vec'] ./ Gamma;
 z0   = [x_nd(:); u_nd(:); tauf_nd];
 end
 
 %% extract state variables from decision vector
 function [x_nd, u_nd, tauf_nd] = extract_state(z, N)
-ix = 39 * (N + 1);
+ix = 6 * (N + 1);
 iu = ix + 2 * (N + 1);
 
-x_nd    = reshape(z(1:ix), 39, []);
+x_nd    = reshape(z(1:ix), 6, []);
 u_nd    = reshape(z(ix+1:iu), 2, []);
 tauf_nd = z(end);
 end
 
 %% compute constraints
-function [c, ceq] = nonlcon(z, x0, xf, L0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Q, H, R, N)
+function [c, ceq] = nonlcon(z, x0, xf, Lp0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Lvss_vec, N)
 % extract state variables
 [x_nd, u_nd, tauf_nd] = extract_state(z, N);
 
@@ -252,12 +285,12 @@ c = [ (accel      - max_accel) / max_accel;
 c = c(:);
 
 % compute equality constraints due to system dynamics
-ceq       = zeros(39 * (N + 1) + 41, 1);
-ic        = 39 * (N + 1);
-ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Q, H, R)) ./ Gamma, [], 1);
+ceq       = zeros(6 * (N + 1) + 8, 1);
+ic        = 6 * (N + 1);
+ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Lvss_vec)) ./ Gamma, [], 1);
 
 % compute equality constraints due to boundary conditions
-ceq(ic+1:ic+3)   = (x(1:3,   1) - x0) ./ Gamma(1:3);       % initial vehicle state
-ceq(ic+4:ic+39)  = (x(4:end, 1) - L0_vec) ./ Gamma(4:end); % initial error covariance
-ceq(ic+40:ic+41) = (x(1:2,  end) - xf) ./ Gamma(1:2);      % final vehicle state
+ceq(ic+1:ic+3) = (x(1:3, 1) - x0) ./ Gamma(1:3);          % initial vehicle state
+ceq(ic+4:ic+6) = (x(4:end, 1) - Lp0_vec) ./ Gamma(4:end); % initial position covariance
+ceq(ic+7:ic+8) = (x(1:2, end) - xf) ./ Gamma(1:2);        % final vehicle state
 end
