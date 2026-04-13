@@ -13,7 +13,7 @@ n         = size(Lp_vec, 2);
 Lpdot_vec = zeros(3, n);
 
 Lvss = utils.lvec_to_L(Lvss_vec);
-Pdot = Lvss * Lvss';
+Pdot = 2 * (Lvss * Lvss');
 
 for k = 1:n
     L               = utils.lvec_to_L(Lp_vec(:,k));
