@@ -57,6 +57,10 @@ else
 
 end
 
+
+
+
+
 %% Create a time/reference vector for the entire length of the simulation
 sampleTime = round(total_time * 0.001);
 sampleTime = 0.1;
@@ -95,3 +99,21 @@ simin = timeseries(data, time);
 simin.Name = 'Reference Positions';
 simin.TimeInfo.Units = 'hours';
 simin.DataInfo.Units = 'kilometers';
+
+%% create obstacle parameters
+obstacle_params.num_obstacles = 1;
+obstacle_params.obstacle_sizes = [];
+obstacle_positions = [];
+for i = 1:obstacle_params.num_obstacles
+    % define obstacle size
+    obstacle_size = [3; 3; 3]; % km
+    obstacle_params.obstacle_sizes = [obstacle_params.obstacle_sizes obstacle_size];
+    % define obstacle center position over the span of the simulation
+    obstacle_i_positions = flip(data, 1);
+    % add obstacle positions to list
+    obstacle_positions = [obstacle_positions obstacle_i_positions];
+    
+end
+if obstacle_params.num_obstacles > 0
+    obstacle_params.obstacle_positions = timeseries(obstacle_positions, time);
+end
