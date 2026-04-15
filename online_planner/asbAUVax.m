@@ -22,7 +22,7 @@ function mdlInitializeSizes(block)
     Config = block.DialogPrm(1).Data;
 
     % Register number of ports
-    block.NumInputPorts = 2;
+    block.NumInputPorts = 3;
     block.NumOutputPorts = 0;
 
     % Override input port properties
@@ -33,7 +33,11 @@ function mdlInitializeSizes(block)
     block.InputPort(2).DatatypeID = 0;
     block.InputPort(2).Dimensions = 3;
     block.InputPort(2).DirectFeedthrough = false;
-    
+
+    block.InputPort(3).DatatypeID = 0;
+    block.InputPort(3).Dimensions = Config.obstacle_params.num_obstacles*3;
+    block.InputPort(3).DirectFeedthrough = false;
+
     %
     % initialize the array of sample times
     %
@@ -100,7 +104,6 @@ function mdlInitializeSizes(block)
         x2 = linspace(y_lims_water(1), y_lims_water(2), 41);
         [X1, X2]         = meshgrid(x1, x2);
         C     = current_field(zeros(1, numel(X1)), X1(:)', X2(:)');
-        speed = reshape(sqrt(C(1,:).^2 + C(2,:).^2), [41,41]);
         m_to_km = 1000;
       
         % x_lims = [0 (abs(X1(1,1)) + Config.water_current_params.x1_max)/m_to_km];
@@ -115,6 +118,13 @@ function mdlInitializeSizes(block)
         % colorbar;
         % plot current direction
         quiver(handle.axes(1),X1(:)'/m_to_km, X2(:)'/m_to_km, C(1,:), C(2,:), 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
+    end
+
+    for i=1:Config.obstacle_params.num_obstacles
+        obstacle_size = Config.obstacle_params.obstacle_sizes(:,i);
+        [xo,yo,zo] = obstacleShape(obstacle_size);
+        handle.obstacle(i) = patch(xo,yo,zo,[1 1 1],"facealpha",0);
+        set(handle.obstacle(i),'edgeColor',[1 0 0],'clipping','off');
     end
 
     
@@ -151,7 +161,7 @@ function mdlInitializeSizes(block)
     handle.craft = patch(xm,ym,zm,[1 1 1],"facealpha",0);
     vert = get(handle.craft,'vertices');
     set(handle.axes(1),'userData',vert)
-    set(handle.craft,'edgeColor',[1 0 0],'clipping','off');
+    set(handle.craft,'edgeColor',[0 0 1],'clipping','off');
     %
     % Set Handles of graphics in Figure UserData
     %
@@ -184,6 +194,7 @@ end
 function mdlUpdate(block)
     u = block.InputPort(1).Data;
     reference_position = block.InputPort(2).Data;
+    obstacle_positions = block.InputPort(3).Data;
     Config = block.DialogPrm(1).Data;
     
     if ~Config.Animenable
@@ -216,7 +227,7 @@ function mdlUpdate(block)
         end
         reference_position_prev = reference_position;
     end
-    legend('UUV','Local Goal Points','Location','northwest');
+    legend('UUV','Obstacle','Local Goal Points','Location','northwest');
 
     %
     % Form Transformation Matrix
@@ -240,6 +251,20 @@ function mdlUpdate(block)
     set(handle.craft,'vertices',dum');
 
     %
+    % Update Obstacles
+    %
+    for i=1:Config.obstacle_params.num_obstacles
+        obstacle_size = Config.obstacle_params.obstacle_sizes(:,i);
+        [xo,yo,zo] = obstacleShape(obstacle_size);
+        xo = xo + obstacle_positions((1)+(i-1)*3);
+        yo = yo + obstacle_positions((2)+(i-1)*3);
+        zo = zo + obstacle_positions((3)+(i-1)*3);
+        % delete(handle.obstacle(i));
+        % handle.obstacle(i) = patch(xo,yo,zo,[1 1 1],"facealpha",0);
+        % set(handle.obstacle(i),'edgeColor',[1 0 0],'clipping','off');
+        set(handle.obstacle(i), 'XData', xo, 'YData', yo); 
+    end
+    %
     % Force MATLAB to Update Drawing
     %
     drawnow
@@ -261,6 +286,15 @@ function [x,y,z]=bodyShape
     xyz = 20*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
                 0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
                 0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
+    x = xyz(1,:);
+    y = xyz(2,:);
+    z = xyz(3,:);
+end
+
+function [x,y,z]=obstacleShape(dims)
+    xyz = 20*[0 dims(1) dims(1)   0   0 0   dims(1)   dims(1)   0   0   0   0   dims(1)   dims(1)   dims(1)   dims(1)
+              0 0 dims(2) dims(2) 0 0   0   dims(2) dims(2) 0   dims(2) dims(2) dims(2) dims(2) 0   0
+              0 0 0   0   0 dims(3) dims(3) dims(3) dims(3) dims(3) dims(3) 0   0   dims(3) dims(3) 0];
     x = xyz(1,:);
     y = xyz(2,:);
     z = xyz(3,:);
