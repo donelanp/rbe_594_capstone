@@ -283,9 +283,11 @@ function [x,y,z]=bodyShape
     % xyz = 2*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
     %          0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
     %          0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
-    xyz = 20*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
+    xyz = 20*[  0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
                 0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
                 0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
+    centroid = mean(xyz,2);
+    xyz = xyz - centroid;
     x = xyz(1,:);
     y = xyz(2,:);
     z = xyz(3,:);
@@ -295,6 +297,8 @@ function [x,y,z]=obstacleShape(dims)
     xyz = 20*[0 dims(1) dims(1)   0   0 0   dims(1)   dims(1)   0   0   0   0   dims(1)   dims(1)   dims(1)   dims(1)
               0 0 dims(2) dims(2) 0 0   0   dims(2) dims(2) 0   dims(2) dims(2) dims(2) dims(2) 0   0
               0 0 0   0   0 dims(3) dims(3) dims(3) dims(3) dims(3) dims(3) 0   0   dims(3) dims(3) 0];
+    centroid = mean(xyz,2);
+    xyz = xyz - centroid;
     x = xyz(1,:);
     y = xyz(2,:);
     z = xyz(3,:);
