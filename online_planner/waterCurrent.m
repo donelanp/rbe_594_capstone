@@ -68,13 +68,13 @@ function mdlUpdate(block)
     
     x = estimated_position(1)*1000;
     y = estimated_position(2)*1000;
-    disp('x:');
-    disp(x);
-    disp('y:');
-    disp(y);
+    % disp('x:');
+    % disp(x);
+    % disp('y:');
+    % disp(y);
     vc = [Config.current_field(time, x, y); 0];
-    disp('vc:');
-    disp(vc);
+    % disp('vc:');
+    % disp(vc);
     block.OutputPort(1).Data = vc;
 
 end
