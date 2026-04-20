@@ -297,6 +297,26 @@ function [x,y,z]=obstacleShape(dims)
     xyz = 20*[0 dims(1) dims(1)   0   0 0   dims(1)   dims(1)   0   0   0   0   dims(1)   dims(1)   dims(1)   dims(1)
               0 0 dims(2) dims(2) 0 0   0   dims(2) dims(2) 0   dims(2) dims(2) dims(2) dims(2) 0   0
               0 0 0   0   0 dims(3) dims(3) dims(3) dims(3) dims(3) dims(3) 0   0   dims(3) dims(3) 0];
+    
+    
+    % Parameters
+    numPoints = 5;          % Number of star points
+    R_outer = sqrt(dims(1)^2+dims(2)^2);            % Outer radius
+    R_inner = R_outer/2;          % Inner radius
+    
+    % Angles for star vertices
+    theta = linspace(0, 2*pi, 2*numPoints + 1);
+    
+    % Alternate radii (outer, inner, outer, inner, ...)
+    r = repmat([R_outer R_inner], 1, numPoints);
+    r = [r r(1)];  % Close the shape
+    
+    % Convert to Cartesian coordinates
+    x = r .* cos(theta);
+    y = r .* sin(theta);
+    z = dims(3) .* ones(size(x));   % Flat in XY plane
+    xyz = [x; y; z];
+
     centroid = mean(xyz,2);
     xyz = xyz - centroid;
     x = xyz(1,:);

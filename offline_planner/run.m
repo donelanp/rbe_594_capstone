@@ -8,7 +8,7 @@ x0 = [-500000; -200000; 0];
 xf = [50000; 30000];
 
 % current model selection
-current_model = 'channel';
+current_model = ['channel'];
 switch current_model
     case 'channel'
         y_center      = -85000;
@@ -101,6 +101,8 @@ for k = 1:numel(t_i)
     C          = current_field(repmat(t_i(k), 1, numel(X1)), X1(:)', X2(:)');
     max_cspeed = max(max_cspeed, max(vecnorm(C, 2, 1)));
 end
+
+return;
 
 % plot vehicle trajectory over time
 % fig           = figure('Theme', 'light', 'Color', 'w', 'Position', [100 100 1024 512]);
