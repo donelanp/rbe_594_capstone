@@ -144,6 +144,8 @@ for k = 1:numel(t_i)
     max_cspeed = max(max_cspeed, max(vecnorm(C, 2, 1)));
 end
 
+return;
+
 % plot vehicle trajectory over time
 fig           = figure('Theme', 'light', 'Color', 'w', 'Position', [100 100 1024 512]);
 vid           = VideoWriter(['trajectory_' current_model '.mp4'], 'MPEG-4');
