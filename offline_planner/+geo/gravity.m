@@ -36,7 +36,7 @@ end
 % convert from local coordinates
 lla    = enu2lla([x(:) y(:) zeros(numel(x), 1)], [lat0 lon0 0], 'flat');
 lat    = lla(:,1)';
-lon    = wrapTo360(lla(:,2))';
+lon    = wrapTo180(lla(:,2))';
 g_anom = Fg(lon, lat);
 end
 
@@ -50,8 +50,8 @@ sw      = enu2lla([region(1), region(3), 0], lla0, 'flat');
 ne      = enu2lla([region(2), region(4), 0], lla0, 'flat');
 lat_min = sw(1);
 lat_max = ne(1);
-lon_min = wrapTo360(sw(2));
-lon_max = wrapTo360(ne(2));
+lon_min = wrapTo180(sw(2));
+lon_max = wrapTo180(ne(2));
 
 % extract regional grid via GMT
 nc_file = [tempname() '.nc'];
