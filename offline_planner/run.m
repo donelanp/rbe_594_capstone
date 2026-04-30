@@ -13,7 +13,7 @@ region = [-660000, 660000, -500000, 500000];
 
 grav_field = @(x, y) geo.gravity(x, y, origin, region);
 mag_field  = @(x, y) geo.magnetic(x, y, origin, region);
-anom_meas  = @(pE, pN) geo.anomaly_measurement(pE, pN, grav_field, mag_field, origin);
+anom_meas  = @(pE, pN) geo.anomaly_measurement(pE, pN, grav_field, mag_field, origin, region);
 
 % current model selection
 current_model = 'channel';
