@@ -5,6 +5,7 @@ Required MATLAB add-ons:
 - DSP System Toolbox
 - Aerospace Toolbox
 - Aerospace Blockset
+- Control System Toolbox
 
 In MATLAB terminal:
 open_system("ON")
