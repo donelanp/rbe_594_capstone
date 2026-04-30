@@ -16,7 +16,7 @@ mag_field  = @(x, y) geo.magnetic(x, y, origin, region);
 anom_meas  = @(pE, pN) geo.anomaly_measurement(pE, pN, grav_field, mag_field, origin);
 
 % current model selection
-current_model = 'hycom';
+current_model = 'channel';
 switch current_model
     case 'zero'
         current_field = @(t, x, y) zeros(2, numel(x));
@@ -143,8 +143,6 @@ for k = 1:numel(t_i)
     C          = current_field(repmat(t_i(k), 1, numel(X1)), X1(:)', X2(:)');
     max_cspeed = max(max_cspeed, max(vecnorm(C, 2, 1)));
 end
-
-return;
 
 % plot vehicle trajectory over time
 fig           = figure('Theme', 'light', 'Color', 'w', 'Position', [100 100 1024 512]);
