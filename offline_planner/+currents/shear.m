@@ -1,9 +1,9 @@
-function [v_c] = shear(~, x, y, intensity)
+function [v_c] = shear(~, ~, y, intensity)
 % Compute linear shear current in the x-direction.
 %
 % Inputs:
 %   t         - time [s] (unused, time-invariant)
-%   x         - x positions [m]
+%   x         - x positions [m] (unused)
 %   y         - y positions [m]
 %   intensity - shear rate [1/s]
 %

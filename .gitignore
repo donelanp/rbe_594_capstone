@@ -1,3 +1,13 @@
 archive/
-**/slprj/*
+**/slprj/
 
+*.asv
+*.autosave
+*.fig
+*.jpg
+*.JPG
+*.mat
+*.mp4
+*.png
+*.slxc
+*.DS_Store
