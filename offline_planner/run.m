@@ -7,8 +7,16 @@ N = 23;
 x0 = [-500000; -200000; 0];
 xf = [-350000; -120000];
 
+% scenario region
+origin = [-37.5, 22.5];
+region = [-660000, 660000, -500000, 500000];
+
+grav_field = @(x, y) geo.gravity(x, y, origin, region);
+mag_field  = @(x, y) geo.magnetic(x, y, origin, region);
+anom_meas  = @(pE, pN) geo.anomaly_measurement(pE, pN, grav_field, mag_field, origin, region);
+
 % current model selection
-current_model = 'hycom';
+current_model = 'channel';
 switch current_model
     case 'zero'
         current_field = @(t, x, y) zeros(2, numel(x));
@@ -30,8 +38,6 @@ switch current_model
         frequency     = 1.5e-5;
         current_field = @(t, x, y) currents.oscillating_uniform(t, x, y, intensity, frequency);
     case 'hycom'
-        origin        = [-37.5, 22.5];
-        region        = [-660000, 660000, -500000, 500000];
         current_field = @(t, x, y) currents.hycom(t, x, y, origin, region);
     otherwise
         error('Unknown current model: %s', current_model);
@@ -88,10 +94,10 @@ cost  = @(z) compute_cost(z, N, alpha);
 % x_nd = [pE_nd (1); pN_nd (1); theta_nd (1); Lp_vec_nd (3)]
 % u_nd = [v_nd (1); δ_nd (1)]
 % z    = [x_nd (6*(N+1)); u_nd (2*(N+1)); tauf_nd (1)]
-constraints = @(z) nonlcon(z, x0, xf, Lp0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Lvss_vec, N);
+constraints = @(z) nonlcon(z, x0, xf, Lp0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Lvss_vec, anom_meas, N);
 
 % initial guess
-z0 = initialize_guess(N, x0, xf, Lp0_vec, T_char, Lvss_vec, Gamma);
+z0 = initialize_guess(N, x0, xf, Lp0_vec, T_char, Lvss_vec, Gamma, anom_meas);
 
 % decision variable bounds
 lb_state = [-Inf; -Inf; -1; eps(); -Inf; eps()];
@@ -187,8 +193,9 @@ Lp_i    = lpm.interpolate(x_nd(4:6,:) .* Gamma(4:6), t_i, tauf);
 trace_i = Lp_i(1,:).^2 + Lp_i(2,:).^2 + Lp_i(3,:).^2;
 
 theta_s        = @(t) interp1(t_s, x_s(:,3), t, 'linear', 'extrap');
+pos_s          = @(t) interp1(t_s, x_s(:,1:2), t, 'linear', 'extrap')';
 L0_vec         = utils.L_to_lvec(chol(P0, 'lower'));
-[t_rec, L_rec] = ode15s(@(t, L_vec) nav.cov_dynamics(-theta_s(t), L_vec, Q, H, R), [0, tauf], L0_vec);
+[t_rec, L_rec] = ode15s(@(t, L_vec) nav.cov_dynamics(-theta_s(t), pos_s(t), L_vec, Q, H, R, anom_meas), [0, tauf], L0_vec);
 trace_rec      = zeros(size(t_rec));
 
 for k = 1:numel(t_rec)
@@ -199,14 +206,49 @@ end
 
 figure('Theme', 'light', 'Color', 'w');
 hold on;
-plot(t_i / 3600, trace_i / 1e6, 'g-', 'LineWidth', 2, 'DisplayName', 'optimal covariance');
-plot(t_rec / 3600, trace_rec / 1e6, 'r--', 'LineWidth', 2, 'DisplayName', 'reconstructed covariance');
+plot(t_i / 3600, trace_i, 'g-', 'LineWidth', 2, 'DisplayName', 'optimal covariance');
+plot(t_rec / 3600, trace_rec, 'r--', 'LineWidth', 2, 'DisplayName', 'reconstructed covariance');
 hold off;
 xlabel('Time [hr]');
-ylabel('\sigma_{pos}^2 [km^2]');
+ylabel('\sigma_{pos}^2 [m^2]');
 title('position covariance vs time');
 legend('Location', 'northwest');
 
+set(findall(gcf, '-property', 'FontSize'), 'FontSize', 16);
+set(findall(gcf, '-property', 'FontWeight'), 'FontWeight', 'bold');
+
+% plot trajectory through gravity and magnetic anomaly fields
+G = reshape(grav_field(X1(:)', X2(:)'), size(X1));
+M = reshape(mag_field(X1(:)',  X2(:)'), size(X1));
+
+figure('Theme', 'light', 'Color', 'w', 'Position', [100 100 1200 500]);
+fields     = {G, M};
+titles     = {'gravity anomaly', 'magnetic anomaly'};
+clabels    = {'[mGal]', '[nT]'};
+for j = 1:2
+    axs(j) = subplot(1, 2, j);
+
+    hold on;
+    pcolor(X1 / 1000, X2 / 1000, fields{j}, 'EdgeColor', 'none', 'FaceColor', 'interp', 'DisplayName', 'anomaly');
+    plot(x0(1) / 1000, x0(2) / 1000, 'k^', 'LineWidth', 2, 'MarkerSize', 10, 'DisplayName', 'initial position');
+    plot(xf(1) / 1000, xf(2) / 1000, 'kd', 'LineWidth', 2, 'MarkerSize', 10, 'DisplayName', 'goal position');
+    plot(x_i(1,:) / 1000, x_i(2,:) / 1000, 'r-', 'LineWidth', 2, 'DisplayName', 'optimal trajectory');
+    hold off;
+
+    cb              = colorbar;
+    cb.Label.String = clabels{j};
+    xlabel('East [km]');
+    if j == 1
+        ylabel('North [km]');
+        legend('Location', 'northwest');
+    end
+    title(titles{j});
+    axis equal;
+    xlim([(x1_min - x1_pad) / 1000, (x1_max + x1_pad) / 1000]);
+    ylim([(x2_min - x2_pad) / 1000, (x2_max + x2_pad) / 1000]);
+end
+
+linkaxes(axs, 'xy');
 set(findall(gcf, '-property', 'FontSize'), 'FontSize', 16);
 set(findall(gcf, '-property', 'FontWeight'), 'FontWeight', 'bold');
 
@@ -222,7 +264,7 @@ J         = (tauf_nd / 2) * sum(w .* L);
 end
 
 %% initialize decision variables
-function [z0] = initialize_guess(N, x0, xf, Lp0_vec, T_char, Lvss_vec, Gamma)
+function [z0] = initialize_guess(N, x0, xf, Lp0_vec, T_char, Lvss_vec, Gamma, anom_meas)
 % straight-line travel at full-tilt
 u_nd = [ones(1, N+1); zeros(1, N+1)];
 
@@ -239,8 +281,9 @@ xy  = x0(1:2) * (1 - s) + xf * s;
 theta0 = atan2(xf(1) - x0(1), xf(2) - x0(2)) * ones(1, N+1);
 
 % propagate covariance along straight-line constant heading trajectory
-t          = 0.5 * tauf * (tau + 1);
-[~, Lp_vec] = ode45(@(t, Lp_vec) nav.pos_cov_dynamics(Lp_vec, Lvss_vec), t, Lp0_vec);
+t           = 0.5 * tauf * (tau + 1);
+pos         = @(t) x0(1:2) + (xf - x0(1:2)) * (t / tauf);
+[~, Lp_vec] = ode45(@(t, Lp_vec) nav.pos_cov_dynamics(pos(t), Lp_vec, Lvss_vec, anom_meas), t, Lp0_vec);
 
 x_nd = [xy; theta0; Lp_vec'] ./ Gamma;
 z0   = [x_nd(:); u_nd(:); tauf_nd];
@@ -257,7 +300,7 @@ tauf_nd = z(end);
 end
 
 %% compute constraints
-function [c, ceq] = nonlcon(z, x0, xf, Lp0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Lvss_vec, N)
+function [c, ceq] = nonlcon(z, x0, xf, Lp0_vec, current_field, wheelbase, max_speed, max_steer, max_accel, max_srate, T_char, Gamma, Lvss_vec, anom_meas, N)
 % extract state variables
 [x_nd, u_nd, tauf_nd] = extract_state(z, N);
 
@@ -287,7 +330,7 @@ c = c(:);
 % compute equality constraints due to system dynamics
 ceq       = zeros(6 * (N + 1) + 8, 1);
 ic        = 6 * (N + 1);
-ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Lvss_vec)) ./ Gamma, [], 1);
+ceq(1:ic) = reshape((x * D' - 0.5 * tauf * nav.system_dynamics(tau, x, u, current_field, wheelbase, Lvss_vec, anom_meas)) ./ Gamma, [], 1);
 
 % compute equality constraints due to boundary conditions
 ceq(ic+1:ic+3) = (x(1:3, 1) - x0) ./ Gamma(1:3);          % initial vehicle state

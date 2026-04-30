@@ -51,9 +51,9 @@ else
     % populate simulation map
     water_current_params.field = current_field;
     water_current_params.x1_min = (x1_min + x1_min*0.2);
-    water_current_params.x1_max = (x1_max + x1_max*0.2);
+    water_current_params.x1_max = (x1_max - x1_max*0.2);
     water_current_params.x2_min = (x2_min + x2_min*0.2);
-    water_current_params.x2_max = (x2_max + x2_max*0.2);
+    water_current_params.x2_max = (x2_max - x2_max*0.2);
 
 end
 
@@ -110,6 +110,9 @@ for i = 1:obstacle_params.num_obstacles
     obstacle_params.obstacle_sizes = [obstacle_params.obstacle_sizes obstacle_size];
     % define obstacle center position over the span of the simulation
     obstacle_i_positions = flip(data, 1);
+    for jj=1:size(obstacle_i_positions,1)
+        obstacle_i_positions(jj,:) = data(size(data,1)/2,:);
+    end
     % add obstacle positions to list
     obstacle_positions = [obstacle_positions obstacle_i_positions];
     

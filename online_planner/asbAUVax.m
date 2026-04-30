@@ -106,6 +106,7 @@ function mdlInitializeSizes(block)
         C     = current_field(zeros(1, numel(X1)), X1(:)', X2(:)');
         m_to_km = 1000;
       
+
         % x_lims = [0 (abs(X1(1,1)) + Config.water_current_params.x1_max)/m_to_km];
         % y_lims = [0 (abs(X2(1,1)) + Config.water_current_params.x2_max)/m_to_km];
         x_lims = x_lims_water / m_to_km;
@@ -118,6 +119,9 @@ function mdlInitializeSizes(block)
         % colorbar;
         % plot current direction
         quiver(handle.axes(1),X1(:)'/m_to_km, X2(:)'/m_to_km, C(1,:), C(2,:), 'k', 'LineWidth', 0.5, 'HandleVisibility', 'off');
+   
+        G = reshape(Config.grav_field(X1(:)', X2(:)'), size(X1));
+        pcolor(X1 / 1000, X2 / 1000, G, 'EdgeColor', 'none', 'FaceColor', 'interp', 'DisplayName', 'anomaly');
     end
 
     for i=1:Config.obstacle_params.num_obstacles
@@ -126,7 +130,6 @@ function mdlInitializeSizes(block)
         handle.obstacle(i) = patch(xo,yo,zo,[1 1 1],"facealpha",0);
         set(handle.obstacle(i),'edgeColor',[1 0 0],'clipping','off');
     end
-
     
     set(handle.axes(1),'visible','on', ...
        'xLim',x_lims,'yLim',y_lims,'zLim',z_lims,...
@@ -227,7 +230,7 @@ function mdlUpdate(block)
         end
         reference_position_prev = reference_position;
     end
-    legend('UUV','Obstacle','Local Goal Points','Location','northwest');
+    
 
     %
     % Form Transformation Matrix
@@ -264,6 +267,9 @@ function mdlUpdate(block)
         % set(handle.obstacle(i),'edgeColor',[1 0 0],'clipping','off');
         set(handle.obstacle(i), 'XData', xo, 'YData', yo); 
     end
+
+    lgd = legend('Gravitational Anomaly Data','Obstacle','UUV','Local Goal Points','Location','northwest');
+    lgd.FontSize = 14;
     %
     % Force MATLAB to Update Drawing
     %
@@ -283,9 +289,11 @@ function [x,y,z]=bodyShape
     % xyz = 2*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
     %          0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
     %          0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
-    xyz = 20*[0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
+    xyz = 10*[  0 2 2   0   0 0   2   2   0   0   0   0   2   2   2   2
                 0 0 0.4 0.4 0 0   0   0.4 0.4 0   0.4 0.4 0.4 0.4 0   0
                 0 0 0   0   0 0.4 0.4 0.4 0.4 0.4 0.4 0   0   0.4 0.4 0];
+    centroid = mean(xyz,2);
+    xyz = xyz - centroid;
     x = xyz(1,:);
     y = xyz(2,:);
     z = xyz(3,:);
@@ -295,6 +303,28 @@ function [x,y,z]=obstacleShape(dims)
     xyz = 20*[0 dims(1) dims(1)   0   0 0   dims(1)   dims(1)   0   0   0   0   dims(1)   dims(1)   dims(1)   dims(1)
               0 0 dims(2) dims(2) 0 0   0   dims(2) dims(2) 0   dims(2) dims(2) dims(2) dims(2) 0   0
               0 0 0   0   0 dims(3) dims(3) dims(3) dims(3) dims(3) dims(3) 0   0   dims(3) dims(3) 0];
+    
+    
+    % Parameters
+    numPoints = 5;          % Number of star points
+    R_outer = sqrt(dims(1)^2+dims(2)^2);            % Outer radius
+    R_inner = R_outer/2;          % Inner radius
+    
+    % Angles for star vertices
+    theta = linspace(0, 2*pi, 2*numPoints + 1);
+    
+    % Alternate radii (outer, inner, outer, inner, ...)
+    r = repmat([R_outer R_inner], 1, numPoints);
+    r = [r r(1)];  % Close the shape
+    
+    % Convert to Cartesian coordinates
+    x = r .* cos(theta);
+    y = r .* sin(theta);
+    z = dims(3) .* ones(size(x));   % Flat in XY plane
+    xyz = [x; y; z];
+
+    centroid = mean(xyz,2);
+    xyz = xyz - centroid;
     x = xyz(1,:);
     y = xyz(2,:);
     z = xyz(3,:);

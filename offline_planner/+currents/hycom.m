@@ -49,7 +49,7 @@ t_wrapped = mod(t, t_max);
 v_c       = [Fu(lon, lat, t_wrapped); Fv(lon, lat, t_wrapped)];
 end
 
-function data = download_hycom_data(origin, region)
+function [data] = download_hycom_data(origin, region)
 lat0 = origin(1);
 lon0 = origin(2);
 

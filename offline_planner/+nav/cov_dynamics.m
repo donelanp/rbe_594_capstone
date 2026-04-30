@@ -1,12 +1,14 @@
-function [Ldot_vec] = cov_dynamics(psi, L_vec, Q, H, R)
+function [Ldot_vec] = cov_dynamics(psi, pos, L_vec, Q, H, R, anom_meas)
 % Compute time derivative of the Cholesky factor of the INS error covariance.
 %
 % Inputs:
-%   psi   - vehicle yaw (1 x n) [rad]
-%   L_vec - lower Cholesky factor of error covariance, vectorized (36 x n)
-%   Q     - process noise covariance matrix (8 x 8)
-%   H     - measurement Jacobian (m x 8)
-%   R     - measurement noise covariance matrix (m x m)
+%   psi       - vehicle yaw (1 x n) [rad]
+%   pos       - vehicle position (2 x n) [pE; pN] [m]
+%   L_vec     - lower Cholesky factor of error covariance, vectorized (36 x n)
+%   Q         - process noise covariance matrix (8 x 8)
+%   H         - non-geophysical anomaly measurement Jacobian (m x 8)
+%   R         - non-geophysical anomaly measurement noise covariance matrix (m x m)
+%   anom_meas - function handle mapping (x, y) to H_anom (2 x 2) and R_anom (2 x 2)
 %
 % Outputs:
 %   Ldot_vec - time derivative of lower Cholesky factor of error covariance, vectorized (36 x n)
@@ -30,7 +32,12 @@ for k = 1:N
     F(4, 7) = cp;
     F(5, 8) = 1;
 
-    Pdot = F * P + P * F' + Q - P * H' * (R \ (H * P));
+    % augment observation model with geophysical anomaly measurements
+    [H_anom, R_anom] = anom_meas(pos(1,k), pos(2,k));
+    H_full           = [H; H_anom, zeros(2, 6)];
+    R_full           = blkdiag(R, R_anom);
+
+    Pdot = F * P + P * F' + Q - P * H_full' * (R_full \ (H_full * P));
 
     M              = L \ Pdot / L';
     S              = tril(M, -1) + 0.5 * diag(diag(M));
