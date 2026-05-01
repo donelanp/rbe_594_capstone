@@ -5,8 +5,10 @@ Required MATLAB add-ons:
 - DSP System Toolbox
 - Aerospace Toolbox
 - Aerospace Blockset
+- Control System Toolbox
 
 In MATLAB terminal:
-open_system("ON")
 
-In simulink window, press Run
+1. Run offline planner by running offline_planner/run.m
+2. In the online_planner directory, run the command: open_system("ON")
+3. In simulink window, press Run
