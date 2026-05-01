@@ -6,6 +6,7 @@ Required MATLAB add-ons:
 - Aerospace Toolbox
 - Aerospace Blockset
 - Control System Toolbox
+- Image Processing Toolbox
 
 In MATLAB terminal:
 
